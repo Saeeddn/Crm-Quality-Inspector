@@ -11,6 +11,8 @@ const PREFIX_INTERACTION: &str = "in:";
 const PREFIX_RUBRIC: &str = "rb:";
 const PREFIX_SCORE: &str = "sc:";
 const PREFIX_ISSUE: &str = "is:";
+const PREFIX_METRIC: &str = "mt:";
+const PREFIX_KPI: &str = "kp:";
 const SET_USERS: &str = "set:users";
 const SET_AGENTS: &str = "set:agents";
 const SET_CUSTOMERS: &str = "set:customers";
@@ -18,6 +20,10 @@ const SET_INTERACTIONS: &str = "set:interactions";
 const SET_RUBRICS: &str = "set:rubrics";
 const SET_SCORES: &str = "set:scores";
 const SET_ISSUES: &str = "set:issues";
+const SET_METRICS: &str = "set:metrics";
+const SET_METRIC_BY_CODE: &str = "idx:metric_by_code";
+const SET_KPIS: &str = "set:kpis";
+const SET_KPI_BY_CODE: &str = "idx:kpi_by_code";
 
 #[derive(Clone)]
 pub struct Store {
@@ -68,7 +74,7 @@ impl Store {
         if self.user_exists(username).await? {
             return Ok(());
         }
-        let hash = bcrypt::hash(password, bcrypt::DEFAULT_COST)?;
+        let hash = crate::auth::hash_password(password)?;
         let user = User {
             username: username.into(),
             password_hash: hash,
@@ -241,6 +247,14 @@ impl Store {
         if !rubrics.is_empty() {
             return Ok(());
         }
+        // Make sure default metrics exist (codes match the seed below)
+        self.ensure_default_metrics().await?;
+        let metrics = self.list_metrics().await?;
+        let by_code = |code: &str| -> String {
+            metrics.iter().find(|m| m.code == code)
+                .map(|m| m.id.clone())
+                .unwrap_or_default()
+        };
         let r = Rubric {
             id: Uuid::new_v4().to_string(),
             name: "استاندارد پایه بانک/بیمه".into(),
@@ -249,13 +263,13 @@ impl Store {
             channel: None,
             version: 1,
             criteria: vec![
-                RubricCriterion { code: "RESP".into(), title: "پاسخگویی".into(), description: "شروع و ادامه تعامل در SLA".into(), weight: 10.0, critical: false },
-                RubricCriterion { code: "ACC".into(), title: "دقت اطلاعات".into(), description: "اطلاعات دقیق و منطبق با محصول".into(), weight: 20.0, critical: true },
-                RubricCriterion { code: "PRO".into(), title: "حرفه‌ای‌گری".into(), description: "لحن، ادب، همدلی و مالکیت تعامل".into(), weight: 10.0, critical: false },
-                RubricCriterion { code: "FCR".into(), title: "حل مسئله".into(), description: "حل در همان تعامل یا ارجاع صحیح".into(), weight: 20.0, critical: false },
-                RubricCriterion { code: "FUP".into(), title: "پیگیری".into(), description: "تعهدات و پیگیری وعده‌داده‌شده".into(), weight: 10.0, critical: false },
-                RubricCriterion { code: "CMP".into(), title: "انطباق".into(), description: "احراز هویت، محرمانگی، مقررات".into(), weight: 20.0, critical: true },
-                RubricCriterion { code: "SAT".into(), title: "تجربه مشتری".into(), description: "شفافیت، سهولت و کاهش تلاش".into(), weight: 10.0, critical: false },
+                RubricCriterion { metric_id: by_code("compliance_identity_verification"), weight: 20.0, critical: true },
+                RubricCriterion { metric_id: by_code("compliance_disclosure"),           weight: 20.0, critical: true },
+                RubricCriterion { metric_id: by_code("communication_greeting"),          weight: 10.0, critical: false },
+                RubricCriterion { metric_id: by_code("communication_active_listening"),  weight: 10.0, critical: false },
+                RubricCriterion { metric_id: by_code("communication_empathy"),            weight: 10.0, critical: false },
+                RubricCriterion { metric_id: by_code("resolution_first_call"),           weight: 20.0, critical: false },
+                RubricCriterion { metric_id: by_code("resolution_followup_commitment"),  weight: 10.0, critical: false },
             ],
             active: true,
             created_at: Utc::now(),
@@ -355,6 +369,177 @@ impl Store {
 
     // ============ DEMO SEED ============
 
+    pub async fn put_metric(&self, m: &MetricDefinition) -> AppResult<()> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        let key = format!("{PREFIX_METRIC}{}", m.id);
+        let v = serde_json::to_string(m).map_err(|e| AppError::Internal(format!("serialize: {e}")))?;
+        let _: () = redis::pipe()
+            .atomic()
+            .set(&key, v)
+            .ignore()
+            .sadd(SET_METRICS, &m.id)
+            .ignore()
+            .hset(SET_METRIC_BY_CODE, &m.code, &m.id)
+            .ignore()
+            .query_async(&mut c)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get_metric(&self, id: &str) -> AppResult<Option<MetricDefinition>> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        let v: Option<String> = c.get(format!("{PREFIX_METRIC}{id}")).await?;
+        match v {
+            Some(s) => Ok(Some(serde_json::from_str(&s).map_err(|e| AppError::Internal(format!("parse: {e}")))?)),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn get_metric_by_code(&self, code: &str) -> AppResult<Option<MetricDefinition>> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        let id: Option<String> = c.hget(SET_METRIC_BY_CODE, code).await?;
+        match id {
+            Some(id) => self.get_metric(&id).await,
+            None => Ok(None),
+        }
+    }
+
+    pub async fn list_metrics(&self) -> AppResult<Vec<MetricDefinition>> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        let ids: Vec<String> = c.smembers(SET_METRICS).await?;
+        if ids.is_empty() { return Ok(vec![]); }
+        let keys: Vec<String> = ids.iter().map(|id| format!("{PREFIX_METRIC}{id}")).collect();
+        let vals: Vec<Option<String>> = c.mget(keys).await?;
+        let mut out = Vec::new();
+        for v in vals.into_iter().flatten() {
+            if let Ok(m) = serde_json::from_str::<MetricDefinition>(&v) {
+                out.push(m);
+            }
+        }
+        Ok(out)
+    }
+
+    pub async fn delete_metric(&self, id: &str) -> AppResult<()> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        // fetch first to remove code index
+        let m = self.get_metric(id).await?;
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+        pipe.del(format!("{PREFIX_METRIC}{id}")).ignore();
+        pipe.srem(SET_METRICS, id).ignore();
+        if let Some(m) = m {
+            pipe.hdel(SET_METRIC_BY_CODE, m.code).ignore();
+        }
+        let _: () = pipe.query_async(&mut c).await?;
+        Ok(())
+    }
+
+    pub async fn ensure_default_metrics(&self) -> AppResult<()> {
+        if !self.list_metrics().await?.is_empty() { return Ok(()); }
+        let defaults: Vec<MetricDefinition> = vec![
+            MetricDefinition {
+                id: Uuid::new_v4().to_string(),
+                code: "compliance_identity_verification".into(),
+                title: "احراز هویت مشتری".into(),
+                description: "آیا کارشناس قبل از ارائه خدمات، هویت مشتری را به درستی احراز کرده است؟".into(),
+                category: "انطباق".into(),
+                metric_type: MetricType::Boolean,
+                min: None, max: None, higher_is_better: true,
+                allowed_values: vec![], value_scores: Default::default(),
+                required_keywords: vec![], scale_min: None, scale_max: None,
+                critical: true,
+                created_at: Utc::now(),
+            },
+            MetricDefinition {
+                id: Uuid::new_v4().to_string(),
+                code: "compliance_disclosure".into(),
+                title: "ارائه اطلاعات الزامی".into(),
+                description: "آیا اطلاعات الزامی (نرخ سود، کارمزد، شرایط) به مشتری اعلام شد؟".into(),
+                category: "انطباق".into(),
+                metric_type: MetricType::Text,
+                min: None, max: None, higher_is_better: true,
+                allowed_values: vec![], value_scores: Default::default(),
+                required_keywords: vec!["نرخ".into(), "کارمزد".into(), "شرایط".into()],
+                scale_min: None, scale_max: None,
+                critical: true,
+                created_at: Utc::now(),
+            },
+            MetricDefinition {
+                id: Uuid::new_v4().to_string(),
+                code: "communication_greeting".into(),
+                title: "سلام و احوالپرسی".into(),
+                description: "شروع مکالمه با سلام و احوالپرسی مناسب".into(),
+                category: "ارتباط".into(),
+                metric_type: MetricType::Scale,
+                min: None, max: None, higher_is_better: true,
+                allowed_values: vec![], value_scores: Default::default(),
+                required_keywords: vec![],
+                scale_min: Some(1.0), scale_max: Some(5.0),
+                critical: false,
+                created_at: Utc::now(),
+            },
+            MetricDefinition {
+                id: Uuid::new_v4().to_string(),
+                code: "communication_active_listening".into(),
+                title: "گوش دادن فعال".into(),
+                description: "توجه کامل به صحبتهای مشتری و پرسشهای تأییدی".into(),
+                category: "ارتباط".into(),
+                metric_type: MetricType::Scale,
+                min: None, max: None, higher_is_better: true,
+                allowed_values: vec![], value_scores: Default::default(),
+                required_keywords: vec![],
+                scale_min: Some(1.0), scale_max: Some(5.0),
+                critical: false,
+                created_at: Utc::now(),
+            },
+            MetricDefinition {
+                id: Uuid::new_v4().to_string(),
+                code: "communication_empathy".into(),
+                title: "همدلی و احترام".into(),
+                description: "ابراز همدلی با مشتری و رعایت احترام".into(),
+                category: "ارتباط".into(),
+                metric_type: MetricType::Scale,
+                min: None, max: None, higher_is_better: true,
+                allowed_values: vec![], value_scores: Default::default(),
+                required_keywords: vec![],
+                scale_min: Some(1.0), scale_max: Some(5.0),
+                critical: false,
+                created_at: Utc::now(),
+            },
+            MetricDefinition {
+                id: Uuid::new_v4().to_string(),
+                code: "resolution_first_call".into(),
+                title: "حل مشکل در تماس اول".into(),
+                description: "آیا مشکل مشتری در همین تماس حل شد؟".into(),
+                category: "حل مسئله".into(),
+                metric_type: MetricType::Categorical,
+                min: None, max: None, higher_is_better: true,
+                allowed_values: vec!["حل شد".into(), "پیگیری لازم".into(), "حل نشد".into()],
+                value_scores: [("حل شد".to_string(), 100.0), ("پیگیری لازم".to_string(), 60.0), ("حل نشد".to_string(), 0.0)].into_iter().collect(),
+                required_keywords: vec![], scale_min: None, scale_max: None,
+                critical: false,
+                created_at: Utc::now(),
+            },
+            MetricDefinition {
+                id: Uuid::new_v4().to_string(),
+                code: "resolution_followup_commitment".into(),
+                title: "تعهد پیگیری".into(),
+                description: "آیا کارشناس زمان مشخص برای پیگیری به مشتری اعلام کرد؟".into(),
+                category: "حل مسئله".into(),
+                metric_type: MetricType::Boolean,
+                min: None, max: None, higher_is_better: true,
+                allowed_values: vec![], value_scores: Default::default(),
+                required_keywords: vec![], scale_min: None, scale_max: None,
+                critical: false,
+                created_at: Utc::now(),
+            },
+        ];
+        for m in &defaults {
+            self.put_metric(m).await?;
+        }
+        Ok(())
+    }
+
     pub async fn seed_demo_data(&self) -> AppResult<()> {
         let existing = self.list_agents().await?;
         if !existing.is_empty() {
@@ -407,6 +592,58 @@ impl Store {
                 created_at: now, updated_at: now,
             };
             self.put_interaction(&i).await?;
+        }
+        Ok(())
+    }
+
+    // =================== KPIs ===================
+
+    pub async fn put_kpi(&self, k: &Kpi) -> AppResult<()> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        let json = serde_json::to_string(k).map_err(|e| AppError::Internal(e.to_string()))?;
+        let _: () = c.set(format!("{PREFIX_KPI}{}", k.id), json).await?;
+        let _: () = c.sadd(SET_KPIS, &k.id).await?;
+        let _: () = c.hset(SET_KPI_BY_CODE, &k.code, &k.id).await?;
+        Ok(())
+    }
+
+    pub async fn get_kpi(&self, id: &str) -> AppResult<Option<Kpi>> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        let v: Option<String> = c.get(format!("{PREFIX_KPI}{id}")).await?;
+        v.map(|s| serde_json::from_str(&s).map_err(|e| AppError::Internal(e.to_string())))
+            .transpose()
+    }
+
+    pub async fn get_kpi_by_code(&self, code: &str) -> AppResult<Option<Kpi>> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        let id: Option<String> = c.hget(SET_KPI_BY_CODE, code).await?;
+        match id {
+            Some(id) => self.get_kpi(&id).await,
+            None => Ok(None),
+        }
+    }
+
+    pub async fn list_kpis(&self) -> AppResult<Vec<Kpi>> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        let ids: Vec<String> = c.smembers(SET_KPIS).await?;
+        if ids.is_empty() { return Ok(vec![]); }
+        let keys: Vec<String> = ids.iter().map(|id| format!("{PREFIX_KPI}{id}")).collect();
+        let values: Vec<Option<String>> = c.mget(keys).await?;
+        let mut kpis = Vec::new();
+        for v in values.into_iter().flatten() {
+            if let Ok(k) = serde_json::from_str::<Kpi>(&v) {
+                kpis.push(k);
+            }
+        }
+        Ok(kpis)
+    }
+
+    pub async fn delete_kpi(&self, id: &str) -> AppResult<()> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        if let Some(k) = self.get_kpi(id).await? {
+            let _: () = c.del(format!("{PREFIX_KPI}{id}")).await?;
+            let _: () = c.srem(SET_KPIS, id).await?;
+            let _: () = c.hdel(SET_KPI_BY_CODE, &k.code).await?;
         }
         Ok(())
     }

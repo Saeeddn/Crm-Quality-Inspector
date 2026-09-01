@@ -26,12 +26,19 @@ pub fn router() -> Router<AppState> {
         .route("/customers/:id", get(get_customer).patch(patch_customer).delete(delete_customer))
         .route("/interactions", get(list_interactions).post(create_interaction))
         .route("/interactions/:id", get(get_interaction))
+        .route("/metrics", get(list_metrics).post(create_metric))
+        .route("/metrics/:id", patch(update_metric).delete(delete_metric))
         .route("/rubrics", get(list_rubrics).post(create_rubric))
         .route("/scoring/score", post(submit_score))
+        .route("/scoring/auto/:interaction_id", post(auto_score_interaction))
         .route("/scoring/:id", get(get_score_by_interaction))
         .route("/issues", get(list_issues))
         .route("/issues/:id/resolve", patch(resolve_issue))
         .route("/recommendations", get(list_recommendations))
+        .route("/kpis", get(list_kpis).post(create_kpi))
+        .route("/kpis/seed", post(seed_kpis))
+        .route("/kpis/:id", patch(toggle_kpi).delete(delete_kpi))
+        .route("/kpis/measure/:interaction_id", get(measure_interaction))
         .route("/reports/dashboard", get(dashboard))
         .route("/reports/agent/:id", get(agent_report))
 }
@@ -315,4 +322,94 @@ pub async fn agent_report(
 ) -> AppResult<Json<serde_json::Value>> {
     let s = Service::new(&state.store);
     Ok(ok(s.agent_report(&id).await?))
+}
+
+// ============ Metrics ============
+
+pub async fn list_metrics(
+    State(state): State<AppState>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    Ok(ok(s.list_metrics().await?))
+}
+
+pub async fn create_metric(
+    State(state): State<AppState>,
+    Json(req): Json<CreateMetricRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    Ok(ok(s.create_metric(req).await?))
+}
+
+pub async fn update_metric(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateMetricRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    Ok(ok(s.update_metric(&id, req).await?))
+}
+
+pub async fn delete_metric(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    s.delete_metric(&id).await?;
+    Ok(ok(serde_json::json!({ "deleted": true })))
+}
+
+// =================== KPIs ===================
+
+pub async fn list_kpis(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    Ok(ok(s.list_kpis().await?))
+}
+
+pub async fn create_kpi(
+    State(state): State<AppState>,
+    Json(req): Json<KpiCreateReq>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    Ok(ok(s.create_kpi(req).await?))
+}
+
+pub async fn seed_kpis(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    Ok(ok(s.seed_default_kpis().await?))
+}
+
+pub async fn toggle_kpi(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<ToggleKpiRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    Ok(ok(s.toggle_kpi(&id, req.active).await?))
+}
+
+pub async fn delete_kpi(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    s.delete_kpi(&id).await?;
+    Ok(ok(serde_json::json!({ "deleted": true })))
+}
+
+pub async fn measure_interaction(
+    State(state): State<AppState>,
+    Path(interaction_id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    Ok(ok(s.auto_score(&interaction_id).await?))
+}
+
+pub async fn auto_score_interaction(
+    State(state): State<AppState>,
+    Path(interaction_id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    let score = s.auto_score_and_save(&interaction_id).await?;
+    Ok(ok(score))
 }

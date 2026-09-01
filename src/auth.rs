@@ -88,9 +88,11 @@ pub async fn auth_middleware_inner(
 }
 
 pub fn hash_password(password: &str) -> AppResult<String> {
-    Ok(bcrypt::hash(password, bcrypt::DEFAULT_COST)?)
+    let mut h = Sha256::new();
+    h.update(password.as_bytes());
+    Ok(format!("{:x}", h.finalize()))
 }
 
 pub fn verify_password(password: &str, hash: &str) -> AppResult<bool> {
-    Ok(bcrypt::verify(password, hash)?)
+    Ok(hash_password(password)? == hash)
 }

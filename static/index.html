@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>سامانه مدیریت کیفیت CRM</title>
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
-<link rel="stylesheet" href="/static/app.css?v=2">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=3">
+<link rel="stylesheet" href="/static/app.css?v=3">
 </head>
 <body>
 
@@ -166,10 +166,15 @@
 
     <div class="page hidden" id="page-rubrics">
       <div class="toolbar">
-        <h2>استانداردهای ارزیابی</h2>
-        <button class="btn btn-primary" data-action="new-rubric">+ استاندارد جدید</button>
+        <h2>پارامترهای اندازه‌گیری کیفیت (KPI)</h2>
+        <div>
+          <button class="btn btn-secondary" id="seedKpisBtn">بارگذاری پیشفرض فارسی</button>
+          <button class="btn btn-primary" id="newKpiBtn">+ تعریف KPI جدید</button>
+        </div>
       </div>
-      <div id="rubricList" class="list"></div>
+      <p style="color:var(--text-muted);margin:8px 0 16px">امتیازدهی تعاملات بر اساس شاخص‌های قابل اندازه‌گیری زیر به صورت خودکار محاسبه می‌شود. هر KPI یک نوع سنجش دارد (تعداد کلمه، وجود، طول، نسبت، یا دستی).</p>
+      <div id="kpiList"></div>
+      <div id="rubricList" class="list" style="display:none"></div>
     </div>
 
     <div class="page hidden" id="page-report">
@@ -199,6 +204,6 @@
 <div id="toast" class="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=2"></script>
+<script src="/static/app.js?v=3"></script>
 </body>
 </html>

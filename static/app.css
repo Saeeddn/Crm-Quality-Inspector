@@ -277,6 +277,67 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
   letter-spacing: 0.5px;
 }
 .data-table tbody tr:hover { background: rgba(99,102,241,0.04); }
+
+/* KPI cards */
+#kpiList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  transition: all 0.15s;
+}
+.kpi-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+.kpi-card.kpi-inactive { opacity: 0.5; }
+.kpi-card-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 10px;
+}
+.kpi-card-name { font-weight: 700; font-size: 15px; }
+.kpi-card-code { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.kpi-card-code code { background: var(--surface-2); padding: 2px 6px; border-radius: 4px; }
+.kpi-card-desc { color: var(--text-muted); font-size: 12px; line-height: 1.6; margin: 8px 0; }
+.kpi-card-actions { display: flex; gap: 6px; margin-top: 12px; }
+
+/* Measurements */
+.measurements { max-height: 360px; overflow-y: auto; }
+.meas-item {
+  padding: 10px; margin: 6px 0; background: var(--surface-2);
+  border-radius: 6px; border-right: 3px solid var(--border);
+}
+.meas-item.meas-fail { border-right-color: var(--danger); }
+.meas-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.meas-name { font-weight: 600; font-size: 13px; }
+.meas-score { font-weight: 800; font-size: 18px; }
+.meas-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.meas-fill { height: 100%; transition: width 0.3s; }
+.meas-evidence { color: var(--text-muted); font-size: 11px; margin-top: 4px; }
+
+/* Recommendations */
+#recommendationList { display: flex; flex-direction: column; gap: 12px; }
+.rec-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden;
+}
+.rec-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.rec-subject { font-weight: 700; font-size: 15px; }
+.risk-score { font-size: 32px; font-weight: 800; line-height: 1; }
+.rec-body { padding: 14px 16px; }
+.factors { list-style: none; padding: 0; margin: 8px 0; }
+.factors li { padding: 4px 0; display: flex; align-items: center; gap: 8px; }
+.factor-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  background: rgba(99,102,241,0.15); color: var(--primary);
+  font-size: 11px; font-weight: 600; min-width: 100px; text-align: center;
+}
 .data-table tbody tr:last-child td { border-bottom: none; }
 .row-actions { display: flex; gap: 6px; }
 

@@ -1,5 +1,5 @@
-// CRM Quality Inspector - frontend v0.3
-// Features: lazy load, localStorage cache, CSV export, Chart.js trend, full-text search
+// CRM Quality Inspector - frontend v0.4
+// Features: KPI management, auto-scoring, predictive risk queue, manual override
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -7,20 +7,15 @@ const $$ = (s) => Array.from(document.querySelectorAll(s));
 const TOKEN_KEY = 'crm_qi_token';
 const USER_KEY = 'crm_qi_user';
 const CACHE_KEY = 'crm_qi_cache_v1';
-const CACHE_TTL = 60_000; // 60s
+const CACHE_TTL = 60_000;
 
 const State = {
   token: localStorage.getItem(TOKEN_KEY) || null,
   user: JSON.parse(localStorage.getItem(USER_KEY) || 'null'),
-  agents: [],
-  customers: [],
-  interactions: [],
-  rubrics: [],
-  scores: {},
-  issues: [],
-  recommendations: [],
-  dashboard: null,
-  loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, dashboard: false, rec: false },
+  agents: [], customers: [], interactions: [], rubrics: [],
+  scores: {}, issues: [], recommendations: [], kpis: [],
+  dashboard: null, agentsAvg: {},
+  loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, kpis: false, dashboard: false, rec: false },
   trendChart: null,
 };
 
@@ -38,18 +33,17 @@ function cacheGet(key) {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const obj = JSON.parse(raw);
-    const entry = obj[key];
-    if (!entry) return null;
-    if (Date.now() - entry.t > CACHE_TTL) return null;
-    return entry.v;
+    const e = obj[key];
+    if (!e || Date.now() - e.t > CACHE_TTL) return null;
+    return e.v;
   } catch { return null; }
 }
 
-function cacheSet(key, value) {
+function cacheSet(key, v) {
   try {
     const raw = localStorage.getItem(CACHE_KEY) || '{}';
     const obj = JSON.parse(raw);
-    obj[key] = { t: Date.now(), v: value };
+    obj[key] = { t: Date.now(), v };
     localStorage.setItem(CACHE_KEY, JSON.stringify(obj));
   } catch {}
 }
@@ -89,11 +83,15 @@ function sevPill(s) {
 function statusPill(s) {
   return s === 'باز' ? '<span class="pill pill-warn">باز</span>' : '<span class="pill pill-good">بسته</span>';
 }
+function priorityPill(p) {
+  const map = { 'بالا': 'pill-bad', 'متوسط': 'pill-warn', 'پایین': 'pill-info' };
+  return `<span class="pill ${map[p] || 'pill-muted'}">اولویت ${esc(p)}</span>`;
+}
 function toast(msg, type = 'success') {
   const t = $('#toast');
   t.textContent = msg;
   t.className = 'toast show ' + type;
-  setTimeout(() => t.classList.remove('show'), 3000);
+  setTimeout(() => t.classList.remove('show'), 3500);
 }
 
 // ============ Login ============
@@ -117,7 +115,7 @@ function logout() {
   setToken(null, null);
   State.agents = []; State.customers = []; State.interactions = [];
   State.rubrics = []; State.scores = {}; State.issues = [];
-  State.dashboard = null; State.recommendations = [];
+  State.recommendations = []; State.kpis = []; State.dashboard = null;
   Object.keys(State.loaded).forEach(k => State.loaded[k] = false);
   $('#loginScreen').classList.remove('hidden');
   $('#appShell').classList.add('hidden');
@@ -128,23 +126,17 @@ async function enterApp() {
   $('#loginScreen').classList.add('hidden');
   $('#appShell').classList.remove('hidden');
   $('#userBadge').textContent = State.user?.username || '';
-  // Load only dashboard at boot
   await loadDashboard();
   switchTab('dashboard');
 }
 
 async function loadDashboard() {
-  if (State.loaded.dashboard) {
-    renderDashboard();
-    return;
-  }
-  const cached = cacheGet('dashboard');
-  if (cached) { State.dashboard = cached; State.loaded.dashboard = true; renderDashboard(); return; }
+  if (State.loaded.dashboard) { renderDashboard(); return; }
+  const c = cacheGet('dashboard'); if (c) { State.dashboard = c; State.loaded.dashboard = true; renderDashboard(); return; }
   try {
-    const d = await api('/reports/dashboard');
-    State.dashboard = d;
+    State.dashboard = await api('/reports/dashboard');
     State.loaded.dashboard = true;
-    cacheSet('dashboard', d);
+    cacheSet('dashboard', State.dashboard);
     renderDashboard();
   } catch (e) {
     if (e.message.includes('invalid or expired') || e.message.includes('missing bearer')) logout();
@@ -158,25 +150,21 @@ async function loadAgents() {
   State.agents = await api('/agents'); State.loaded.agents = true; cacheSet('agents', State.agents);
   renderAgents();
 }
-
 async function loadCustomers() {
   if (State.loaded.customers) { renderCustomers(); return; }
   const c = cacheGet('customers'); if (c) { State.customers = c; State.loaded.customers = true; renderCustomers(); return; }
   State.customers = await api('/customers'); State.loaded.customers = true; cacheSet('customers', State.customers);
   renderCustomers();
 }
-
 async function loadInteractions() {
   if (State.loaded.interactions) { renderInteractions(); return; }
   const c = cacheGet('interactions'); if (c) { State.interactions = c; State.loaded.interactions = true; renderInteractions(); return; }
   State.interactions = await api('/interactions');
   State.loaded.interactions = true;
   cacheSet('interactions', State.interactions);
-  // lazy-load scores in background
   loadAllScoresLazy();
   renderInteractions();
 }
-
 async function loadAllScoresLazy() {
   const promises = State.interactions.map(it =>
     api('/scoring/' + it.id).then(s => { if (s) State.scores[it.id] = s; }).catch(() => null)
@@ -184,19 +172,16 @@ async function loadAllScoresLazy() {
   await Promise.all(promises);
   renderInteractions();
 }
-
 async function loadIssues() {
   if (State.loaded.issues) { renderIssues(); return; }
   State.issues = await api('/issues'); State.loaded.issues = true;
   renderIssues();
 }
-
-async function loadRubrics() {
-  if (State.loaded.rubrics) { renderRubrics(); return; }
-  State.rubrics = await api('/rubrics'); State.loaded.rubrics = true;
-  renderRubrics();
+async function loadKpis() {
+  if (State.loaded.kpis) { renderKpis(); return; }
+  State.kpis = await api('/kpis'); State.loaded.kpis = true;
+  renderKpis();
 }
-
 async function loadRecommendations() {
   if (State.loaded.rec) { renderRecommendations(); return; }
   State.recommendations = await api('/recommendations'); State.loaded.rec = true;
@@ -207,21 +192,20 @@ function switchTab(tab) {
   $$('.page').forEach(p => p.classList.add('hidden'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
   $('#page-' + tab).classList.remove('hidden');
-  $(`.nav-item[data-tab="${tab}"]`).classList.add('active');
+  $(`.nav-item[data-tab="${tab}"]`)?.classList.add('active');
   $('#topbarTitle').textContent = {
     dashboard: 'داشبورد', interactions: 'تعاملات', agents: 'کارشناسان',
     customers: 'مشتریان', recommendations: 'پیشنهادهای QA', issues: 'ایرادات',
-    rubrics: 'استانداردها', report: 'گزارش کارشناس',
+    rubrics: 'پارامترهای اندازه‌گیری', report: 'گزارش کارشناس',
   }[tab] || tab;
-  // Lazy load
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'interactions') loadInteractions();
   else if (tab === 'agents') loadAgents();
   else if (tab === 'customers') loadCustomers();
   else if (tab === 'issues') loadIssues();
-  else if (tab === 'rubrics') loadRubrics();
+  else if (tab === 'rubrics') loadKpis();
   else if (tab === 'recommendations') loadRecommendations();
-  else if (tab === 'report') { loadAgents().then(populateReportAgents); }
+  else if (tab === 'report') loadAgents().then(populateReportAgents);
 }
 
 $$('.nav-item').forEach(n => n.addEventListener('click', () => switchTab(n.dataset.tab)));
@@ -250,7 +234,6 @@ function renderDashboard() {
     </div>
     <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, d.coverage || 0)}%"></div></div>
   `;
-  // Trend chart (uses local scores if loaded; otherwise placeholder)
   renderTrendChart();
 }
 
@@ -260,7 +243,10 @@ function renderTrendChart() {
   if (State.trendChart) { State.trendChart.destroy(); State.trendChart = null; }
   const scores = Object.values(State.scores);
   if (scores.length < 2) {
-    canvas.getContext('2d').fillText('برای نمایش نمودار، حداقل ۲ ارزیابی لازم است', 10, 30);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#8a92a6'; ctx.font = '14px Tahoma';
+    ctx.fillText('برای نمایش نمودار، حداقل ۲ ارزیابی لازم است', 10, 30);
     return;
   }
   const sorted = scores.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -273,10 +259,7 @@ function renderTrendChart() {
       data,
       borderColor: '#6366f1',
       backgroundColor: 'rgba(99,102,241,0.15)',
-      fill: true,
-      tension: 0.3,
-      pointRadius: 4,
-      pointBackgroundColor: '#8b5cf6',
+      fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#8b5cf6',
     }] },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -298,7 +281,6 @@ function renderInteractions() {
   const agentId = $('#fAgent')?.value || '';
   const status = $('#fStatus')?.value || '';
 
-  // populate agent filter
   const sel = $('#fAgent');
   if (sel && sel.options.length <= 1 && State.agents.length) {
     sel.innerHTML = '<option value="">همه کارشناسان</option>' + State.agents
@@ -325,13 +307,13 @@ function renderInteractions() {
       <td><b>${esc(i.subject)}</b><div style="color:var(--text-muted);font-size:12px;margin-top:2px">${esc((i.transcript || '').slice(0, 80))}${(i.transcript || '').length > 80 ? '…' : ''}</div></td>
       <td>${scorePill(s?.overall_score, s?.critical_fail)}</td>
       <td class="row-actions">
-        <button class="btn btn-sm btn-primary" data-score="${i.id}">${s ? 'بازبینی' : 'ارزیابی'}</button>
+        <button class="btn btn-sm btn-primary" data-auto="${i.id}">${s ? 'بازبینی' : 'ارزیابی خودکار'}</button>
         <button class="btn btn-sm" data-view="${i.id}">مشاهده</button>
       </td>
     </tr>`;
   }).join('') || `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">تعاملی یافت نشد</td></tr>`;
 
-  tbody.querySelectorAll('[data-score]').forEach(b => b.addEventListener('click', () => openScore(b.dataset.score)));
+  tbody.querySelectorAll('[data-auto]').forEach(b => b.addEventListener('click', () => openAutoScore(b.dataset.auto)));
   tbody.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => openView(b.dataset.view)));
 }
 
@@ -348,14 +330,9 @@ function exportCsv() {
     const s = State.scores[i.id];
     const agent = State.agents.find(a => a.id === i.agent_id);
     const customer = State.customers.find(c => c.id === i.customer_id);
-    rows.push([
-      i.id, fmtDate(i.created_at), agent?.name || '', customer?.name || '',
-      i.channel, i.subject,
-      s ? s.overall_score : '',
-      s ? s.level : '',
-      s ? (s.critical_fail ? 'بله' : 'خیر') : '',
-      s?.notes || '',
-    ]);
+    rows.push([i.id, fmtDate(i.created_at), agent?.name || '', customer?.name || '',
+      i.channel, i.subject, s ? s.overall_score : '', s ? s.level : '',
+      s ? (s.critical_fail ? 'بله' : 'خیر') : '', s?.notes || '']);
   }
   const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -366,73 +343,99 @@ function exportCsv() {
   toast('فایل CSV دانلود شد');
 }
 
-async function openScore(id) {
+// ============ Auto-Score Modal ============
+async function openAutoScore(id) {
   const interaction = State.interactions.find(i => i.id === id);
   if (!interaction) return;
-  await loadRubrics();
+  if (State.kpis.length === 0) await loadKpis();
   const customer = State.customers.find(c => c.id === interaction.customer_id);
-  const r = State.rubrics.find(x => x.active && (!x.product_type || x.product_type === customer?.product_type))
-    || State.rubrics.find(x => x.active) || State.rubrics[0];
-  if (!r) { toast('استانداردی یافت نشد', 'error'); return; }
-  // Make sure score is loaded
-  if (!State.scores[id]) {
-    try { State.scores[id] = await api('/scoring/' + id); } catch {}
-  }
-  const old = State.scores[id];
-  const criteria = r.criteria || [];
-  openModal('ارزیابی کیفیت تعامل', `
+  const agent = State.agents.find(a => a.id === interaction.agent_id);
+
+  // First show a preview/measure
+  openModal('ارزیابی خودکار', `
     <div style="background:var(--surface-2);padding:12px;border-radius:8px;margin-bottom:14px">
       <b>${esc(interaction.subject)}</b>
-      <div style="color:var(--text-muted);font-size:12px;margin-top:4px">${esc(interaction.transcript)}</div>
+      <div style="color:var(--text-muted);font-size:12px;margin-top:4px">${esc(interaction.transcript.slice(0, 300))}${interaction.transcript.length > 300 ? '…' : ''}</div>
     </div>
-    <div id="criteriaList">
-      ${criteria.map((c, n) => `
-        <div class="score-item">
-          <div class="score-row">
-            <span class="score-title">${esc(c.title)} ${c.critical ? '<span class="pill pill-bad">بحرانی</span>' : ''}</span>
-            <span class="score-weight">وزن ${c.weight}%</span>
-          </div>
-          <div class="score-desc">${esc(c.description)}</div>
-          <input type="range" class="score-range" data-score-range="${n}" min="0" max="100" value="${old?.dimension_scores?.[n] ?? 80}">
-          <div class="score-val" id="sv${n}">${old?.dimension_scores?.[n] ?? 80}</div>
-        </div>
-      `).join('')}
+    <div style="text-align:center;padding:20px">
+      <div class="spinner" style="display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin 1s linear infinite"></div>
+      <p style="color:var(--text-muted);margin-top:12px">در حال اندازه‌گیری خودکار ${State.kpis.filter(k=>k.active).length} KPI...</p>
     </div>
-    <div class="field"><label>یادداشت ارزیاب (اختیاری)</label><textarea id="scoreNotes" placeholder="نکات یا توضیحات تکمیلی">${esc(old?.notes || '')}</textarea></div>
-  `, `<button class="btn btn-primary" id="submitScoreBtn">ثبت ارزیابی</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+  `, '');
+  document.head.insertAdjacentHTML('beforeend', '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>');
 
-  document.querySelectorAll('[data-score-range]').forEach(r => {
-    r.addEventListener('input', e => {
-      document.getElementById('sv' + e.target.dataset.scoreRange).textContent = e.target.value;
+  try {
+    const res = await api('/kpis/measure/' + id);
+    const measurements = res.measurements || [];
+    const overall = res.overall_score;
+    const level = res.level;
+    const cf = res.critical_fail;
+    const scoreColor = cf ? 'var(--danger)' : overall >= 85 ? 'var(--success)' : overall >= 60 ? 'var(--warning)' : 'var(--danger)';
+
+    openModal('ارزیابی خودکار', `
+      <div style="background:var(--surface-2);padding:12px;border-radius:8px;margin-bottom:14px">
+        <b>${esc(interaction.subject)}</b>
+        <div style="color:var(--text-muted);font-size:12px;margin-top:4px">
+          کارشناس: ${esc(agent?.name || '-')} | مشتری: ${esc(customer?.name || '-')}
+        </div>
+      </div>
+
+      <div style="text-align:center;padding:20px;background:var(--surface-2);border-radius:10px;margin-bottom:16px">
+        <div style="font-size:48px;font-weight:800;color:${scoreColor}">${overall.toFixed(1)}</div>
+        <div style="color:var(--text-muted);font-size:14px;margin-top:4px">${esc(level)}</div>
+        ${cf ? '<div class="pill pill-bad" style="margin-top:8px">شکست بحرانی</div>' : ''}
+      </div>
+
+      <h3 style="margin:0 0 10px;font-size:14px">جزئیات اندازه‌گیری KPI</h3>
+      <div class="measurements">
+        ${measurements.map(m => `
+          <div class="meas-item ${m.critical_fail ? 'meas-fail' : ''}">
+            <div class="meas-row">
+              <span class="meas-name">${esc(m.kpi_name)} ${m.critical ? '<span class="pill pill-bad" style="font-size:10px">بحرانی</span>' : ''}</span>
+              <span class="meas-score" style="color:${m.score < 60 ? 'var(--danger)' : m.score >= 85 ? 'var(--success)' : 'var(--warning)'}">${m.score.toFixed(0)}</span>
+            </div>
+            <div class="meas-bar"><div class="meas-fill" style="width:${Math.min(100, m.score)}%;background:${m.score < 60 ? 'var(--danger)' : m.score >= 85 ? 'var(--success)' : 'var(--primary)'}"></div></div>
+            <div class="meas-evidence">${esc(m.evidence)}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="field" style="margin-top:14px">
+        <label>یادداشت ارزیاب (اختیاری)</label>
+        <textarea id="autoScoreNotes" placeholder="نکات تکمیلی شما"></textarea>
+      </div>
+    `, `<button class="btn btn-primary" id="saveAutoScore">ذخیره در داشبورد</button>
+        <button class="btn" data-action="close-modal">انصراف</button>`);
+
+    $('#saveAutoScore').addEventListener('click', async () => {
+      const btn = $('#saveAutoScore');
+      btn.disabled = true; btn.textContent = 'در حال ذخیره...';
+      try {
+        const notes = $('#autoScoreNotes').value.trim();
+        const saved = await api('/scoring/auto/' + id, {
+          method: 'POST',
+          body: JSON.stringify(notes ? { notes } : {}),
+        });
+        State.scores[id] = saved;
+        invalidateCache();
+        closeModal();
+        renderInteractions();
+        renderTrendChart();
+        toast(`امتیاز ${saved.overall_score.toFixed(1)} (${saved.level}) ذخیره شد`);
+      } catch (e) {
+        toast(e.message, 'error');
+        btn.disabled = false; btn.textContent = 'ذخیره در داشبورد';
+      }
     });
-  });
-  $('#submitScoreBtn').addEventListener('click', async () => {
-    const scores = Array.from(document.querySelectorAll('[data-score-range]')).map(r => Number(r.value));
-    const submitBtn = $('#submitScoreBtn');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'در حال ثبت...';
-    try {
-      const res = await api('/scoring/score', {
-        method: 'POST',
-        body: JSON.stringify({
-          interaction_id: id, rubric_id: r.id, scores,
-          evaluator: State.user?.username,
-          notes: $('#scoreNotes').value.trim(),
-        })
-      });
-      State.scores[id] = res;
-      invalidateCache();
-      closeModal();
-      renderInteractions();
-      renderTrendChart();
-      toast(`امتیاز ثبت شد: ${res.overall_score} (${res.level})`);
-    } catch (e) {
+  } catch (e) {
+    closeModal();
+    if (e.message.includes('هیچ KPI فعالی')) {
+      toast('ابتدا KPI تعریف کنید یا پیش‌فرض‌ها را بارگذاری کنید', 'error');
+      switchTab('rubrics');
+    } else {
       toast(e.message, 'error');
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'ثبت ارزیابی';
     }
-  });
+  }
 }
 
 async function openView(id) {
@@ -457,11 +460,56 @@ async function openView(id) {
         <div style="color:var(--text-muted)">${esc(s.level)}</div>
         ${s.critical_fail ? '<div class="pill pill-bad" style="margin-top:8px">شکست بحرانی</div>' : ''}
         ${s.notes ? `<div style="margin-top:10px;text-align:right;color:var(--text-muted);font-size:12px">${esc(s.notes)}</div>` : ''}
+        ${s.evaluator ? `<div style="margin-top:6px;color:var(--text-muted);font-size:11px">ارزیاب: ${esc(s.evaluator)}</div>` : ''}
       </div>
     ` : ''}
-  `, `<button class="btn btn-primary" id="fromViewScore">${s ? 'بازبینی ارزیابی' : 'ارزیابی'}</button>
+  `, `<button class="btn btn-primary" id="fromViewScore">${s ? 'بازبینی' : 'ارزیابی خودکار'}</button>
       <button class="btn" data-action="close-modal">بستن</button>`);
-  $('#fromViewScore')?.addEventListener('click', () => { closeModal(); openScore(id); });
+  $('#fromViewScore')?.addEventListener('click', () => { closeModal(); openAutoScore(id); });
+}
+
+// ============ Recommendations (Risk Queue) ============
+function renderRecommendations() {
+  const list = $('#recommendationList');
+  if (!list) return;
+  if (!State.recommendations.length) {
+    list.innerHTML = '<div class="list-item" style="text-align:center;color:var(--text-muted);padding:40px">همه تعاملات ارزیابی شده‌اند. عالی!</div>';
+    return;
+  }
+  list.innerHTML = State.recommendations.map(r => {
+    const color = r.risk_score >= 70 ? 'var(--danger)' : r.risk_score >= 40 ? 'var(--warning)' : 'var(--info)';
+    return `<div class="rec-card">
+      <div class="rec-header">
+        <div>
+          <div class="rec-subject">${esc(r.subject)}</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:2px">
+            کارشناس: ${esc(r.agent_name)} | مشتری: ${esc(r.customer_name)} | کانال: ${esc(r.channel)}
+          </div>
+        </div>
+        <div style="text-align:center">
+          <div class="risk-score" style="color:${color}">${r.risk_score.toFixed(0)}</div>
+          <div style="font-size:10px;color:var(--text-muted)">ریسک</div>
+          ${priorityPill(r.priority)}
+        </div>
+      </div>
+      <div class="rec-body">
+        <div style="margin-bottom:8px"><b>دلایل ریسک:</b></div>
+        <ul class="factors">
+          ${r.factors.map(f => `<li><span class="factor-pill">${esc(f.label)}</span> <span style="color:var(--text-muted);font-size:12px">${esc(f.reason)}</span></li>`).join('')}
+        </ul>
+        <div style="margin-top:8px;padding:8px;background:var(--surface-2);border-radius:6px">
+          <b>اقدام پیشنهادی:</b> ${esc(r.suggested_action)}
+        </div>
+        <div style="margin-top:10px">
+          <button class="btn btn-sm btn-primary" data-rec-auto="${r.interaction_id}">ارزیابی خودکار</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-rec-auto]').forEach(b => b.addEventListener('click', () => {
+    switchTab('interactions');
+    setTimeout(() => openAutoScore(b.dataset.recAuto), 200);
+  }));
 }
 
 // ============ Agents ============
@@ -567,7 +615,7 @@ function openNewInteraction() {
     <div class="field"><label>مشتری</label><select id="iCust">${State.customers.map(c => `<option value="${c.id}">${esc(c.name)} — ${esc(c.product_type)}</option>`).join('')}</select></div>
     <div class="field"><label>کانال</label><select id="iCh"><option>تلفن</option><option>حضوری</option><option>ایمیل</option><option>چت</option><option>پیامک</option></select></div>
     <div class="field"><label>موضوع</label><input id="iSub"></div>
-    <div class="field"><label>متن مکالمه</label><textarea id="iTr" style="min-height:120px"></textarea></div>
+    <div class="field"><label>متن مکالمه</label><textarea id="iTr" style="min-height:120px" placeholder="مثال: سلام. مشتری با عصبانیت شکایت کرد که ..."></textarea></div>
   `, `<button class="btn btn-primary" id="saveInteraction">ثبت</button>
       <button class="btn" data-action="close-modal">انصراف</button>`);
   $('#saveInteraction').addEventListener('click', async () => {
@@ -581,38 +629,133 @@ function openNewInteraction() {
       })});
       State.loaded.interactions = false;
       State.loaded.dashboard = false;
+      State.loaded.rec = false;
       closeModal(); await loadInteractions(); await loadDashboard();
       toast('تعامل ثبت شد');
     } catch (e) { toast(e.message, 'error'); }
   });
 }
 
-// ============ Recommendations ============
-function renderRecommendations() {
-  const list = $('#recommendationList');
+// ============ KPIs Management ============
+function renderKpis() {
+  const list = $('#kpiList');
   if (!list) return;
-  if (!State.recommendations.length) {
-    list.innerHTML = '<div class="list-item" style="text-align:center;color:var(--text-muted)">پیشنهادی وجود ندارد</div>';
+  if (!State.kpis.length) {
+    list.innerHTML = `<div class="card" style="text-align:center;padding:40px;color:var(--text-muted)">
+      <div style="font-size:48px;margin-bottom:12px">📊</div>
+      <div style="margin-bottom:16px">هیچ KPI تعریف نشده است</div>
+      <button class="btn btn-primary" id="emptySeedKpis">بارگذاری ۷ KPI پیشفرض فارسی</button>
+    </div>`;
+    $('#emptySeedKpis')?.addEventListener('click', seedKpis);
     return;
   }
-  list.innerHTML = State.recommendations.map(r => {
-    const agent = State.agents.find(a => a.id === r.agent_id);
-    return `<div class="list-item">
-      <div class="list-item-header">
-        <span class="list-item-title">${esc(r.customer_name || 'تعامل')}</span>
-        <span class="pill ${r.priority === 'بالا' ? 'pill-warn' : 'pill-info'}">اولویت: ${esc(r.priority)}</span>
-      </div>
-      <div class="list-item-body">
-        <div><b>کارشناس:</b> ${esc(agent?.name || '-')} <span class="pill pill-muted">${esc(agent?.department || '')}</span></div>
-        <div><b>دلیل:</b> ${esc(r.reason)}</div>
-        <div><b>اقدام پیشنهادی:</b> ${esc(r.suggested_action)}</div>
-        <div style="margin-top:8px">
-          <button class="btn btn-sm btn-primary" data-rec-score="${r.interaction_id}">ارزیابی تعامل</button>
+  const kindLabel = {
+    keyword_count: 'تعداد کلمه کلیدی',
+    keyword_presence: 'وجود کلمه',
+    text_length: 'طول متن',
+    keyword_ratio: 'نسبت کلمه',
+    response_time: 'زمان پاسخ',
+    manual_range: 'دستی',
+  };
+  list.innerHTML = State.kpis.map(k => `
+    <div class="kpi-card ${k.active ? '' : 'kpi-inactive'}">
+      <div class="kpi-card-header">
+        <div>
+          <div class="kpi-card-name">${esc(k.name)} ${k.critical ? '<span class="pill pill-bad" style="font-size:10px">بحرانی</span>' : ''}</div>
+          <div class="kpi-card-code"><code>${esc(k.code)}</code></div>
+        </div>
+        <div style="text-align:left">
+          <div style="font-size:11px;color:var(--text-muted)">${kindLabel[k.kind] || k.kind}</div>
+          <div style="font-size:20px;font-weight:700;color:var(--primary)">${k.weight}<span style="font-size:12px;color:var(--text-muted)">٪</span></div>
         </div>
       </div>
-    </div>`;
-  }).join('');
-  list.querySelectorAll('[data-rec-score]').forEach(b => b.addEventListener('click', () => { switchTab('interactions'); setTimeout(() => openScore(b.dataset.recScore), 100); }));
+      <div class="kpi-card-desc">${esc(k.description)}</div>
+      ${k.pattern ? `<div style="font-size:11px;color:var(--text-muted);margin:4px 0"><b>الگو:</b> <code>${esc(k.pattern)}</code></div>` : ''}
+      ${k.threshold != null ? `<div style="font-size:11px;color:var(--text-muted);margin:4px 0"><b>آستانه:</b> ${esc(k.threshold)}</div>` : ''}
+      <div class="kpi-card-actions">
+        <button class="btn btn-sm" data-toggle-kpi="${k.id}" data-active="${!k.active}">${k.active ? 'غیرفعال' : 'فعال'}</button>
+        <button class="btn btn-sm" data-del-kpi="${k.id}">حذف</button>
+      </div>
+    </div>
+  `).join('');
+  list.querySelectorAll('[data-toggle-kpi]').forEach(b => b.addEventListener('click', async () => {
+    try {
+      const active = b.dataset.active === 'true';
+      await api('/kpis/' + b.dataset.toggleKpi, { method: 'PATCH', body: JSON.stringify({ active }) });
+      State.kpis = await api('/kpis'); renderKpis();
+      toast(active ? 'فعال شد' : 'غیرفعال شد');
+    } catch (e) { toast(e.message, 'error'); }
+  }));
+  list.querySelectorAll('[data-del-kpi]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('این KPI حذف شود؟')) return;
+    try {
+      await api('/kpis/' + b.dataset.delKpi, { method: 'DELETE' });
+      State.kpis = await api('/kpis'); renderKpis();
+      toast('حذف شد');
+    } catch (e) { toast(e.message, 'error'); }
+  }));
+}
+
+async function seedKpis() {
+  try {
+    const result = await api('/kpis/seed', { method: 'POST' });
+    State.kpis = await api('/kpis');
+    renderKpis();
+    toast(`${result.length} KPI بارگذاری شد`);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+$('#seedKpisBtn')?.addEventListener('click', seedKpis);
+$('#newKpiBtn')?.addEventListener('click', openNewKpi);
+
+function openNewKpi() {
+  openModal('تعریف KPI جدید', `
+    <div class="field"><label>کد (انگلیسی، یکتا)</label><input id="kCode" placeholder="مثل: empathy_keywords"></div>
+    <div class="field"><label>نام نمایشی (فارسی)</label><input id="kName" placeholder="مثل: همدلی"></div>
+    <div class="field"><label>نوع سنجش</label>
+      <select id="kKind">
+        <option value="keyword_count">تعداد کلمه کلیدی (هر چند کلمه با کاما)</option>
+        <option value="keyword_presence">وجود یا عدم وجود کلمه</option>
+        <option value="text_length">طول متن (تعداد کلمه)</option>
+        <option value="keyword_ratio">نسبت کلمه به کل (برای کلمات منفی/مثبت)</option>
+        <option value="response_time">زمان پاسخ (میلی‌ثانیه)</option>
+        <option value="manual_range">دستی (امتیاز توسط ارزیاب)</option>
+      </select>
+    </div>
+    <div class="field"><label>توضیح</label><textarea id="kDesc" placeholder="چه چیزی اندازه‌گیری می‌شود؟"></textarea></div>
+    <div class="field"><label>الگو (برای keyword_*, در غیر این صورت خالی)</label>
+      <input id="kPattern" placeholder="مثل: سلام,درود,صبح بخیر">
+    </div>
+    <div class="field"><label>آستانه (برای keyword_count, text_length)</label>
+      <input id="kThreshold" type="number" step="0.1" placeholder="مثل: 2.0 برای 'حداقل ۲ بار'">
+    </div>
+    <div class="field"><label>وزن (۰-۱۰۰)</label><input id="kWeight" type="number" min="0" max="100" step="1" value="10"></div>
+    <div class="field"><label><input type="checkbox" id="kCritical"> شکست بحرانی (اگر نمره کمتر از ۶۰ باشد، کل interaction شکست می‌خورد)</label></div>
+  `, `<button class="btn btn-primary" id="saveKpi">ذخیره KPI</button>
+      <button class="btn" data-action="close-modal">انصراف</button>`);
+  $('#saveKpi').addEventListener('click', async () => {
+    const code = $('#kCode').value.trim();
+    const name = $('#kName').value.trim();
+    const weight = parseFloat($('#kWeight').value);
+    if (!code || !name) { toast('کد و نام الزامی است', 'error'); return; }
+    if (isNaN(weight) || weight < 0 || weight > 100) { toast('وزن باید ۰-۱۰۰ باشد', 'error'); return; }
+    const th = $('#kThreshold').value.trim();
+    const req = {
+      code, name,
+      kind: $('#kKind').value,
+      description: $('#kDesc').value.trim(),
+      pattern: $('#kPattern').value.trim() || null,
+      threshold: th ? parseFloat(th) : null,
+      weight,
+      critical: $('#kCritical').checked,
+    };
+    try {
+      await api('/kpis', { method: 'POST', body: JSON.stringify(req) });
+      State.kpis = await api('/kpis');
+      closeModal(); renderKpis();
+      toast('KPI اضافه شد');
+    } catch (e) { toast(e.message, 'error'); }
+  });
 }
 
 // ============ Issues ============
@@ -626,7 +769,6 @@ function renderIssues() {
   if (sev) rows = rows.filter(x => x.severity === sev);
   rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   tbody.innerHTML = rows.map(x => {
-    const agent = State.agents.find(a => a.id === x.agent_id);
     return `<tr>
       <td>${sevPill(x.severity)}</td>
       <td>${esc(x.category)}</td>
@@ -661,34 +803,6 @@ function openResolve(id) {
       toast('ایراد بسته شد');
     } catch (e) { toast(e.message, 'error'); }
   });
-}
-
-// ============ Rubrics ============
-function renderRubrics() {
-  const list = $('#rubricList');
-  if (!list) return;
-  if (!State.rubrics.length) {
-    list.innerHTML = '<div class="list-item" style="text-align:center;color:var(--text-muted)">استانداردی یافت نشد</div>';
-    return;
-  }
-  list.innerHTML = State.rubrics.map(r => `
-    <div class="list-item">
-      <div class="list-item-header">
-        <span class="list-item-title">${esc(r.name)} <span class="pill ${r.active ? 'pill-good' : 'pill-muted'}" style="margin-right:6px">${r.active ? 'فعال' : 'غیرفعال'}</span> <span class="pill pill-info">نسخه ${r.version}</span></span>
-        <span class="list-item-meta">${esc(r.department)} — ${esc(r.product_type || 'همه محصولات')}</span>
-      </div>
-      ${r.criteria.map(c => `
-        <div style="padding:10px 0;border-bottom:1px solid var(--border)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <span><b>${esc(c.title)}</b> ${c.critical ? '<span class="pill pill-bad">بحرانی</span>' : ''}</span>
-            <span class="score-weight">${c.weight}%</span>
-          </div>
-          <div style="color:var(--text-muted);font-size:12px;margin-bottom:6px">${esc(c.description)}</div>
-          <div class="bar-track"><div class="bar-fill" style="width:${c.weight}%;background:${c.critical ? 'var(--danger)' : 'var(--primary)'}"></div></div>
-        </div>
-      `).join('')}
-    </div>
-  `).join('');
 }
 
 // ============ Report ============
