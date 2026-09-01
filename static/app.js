@@ -568,7 +568,7 @@ function openModal(title, body, footer = '') {
   $('#modalBody').innerHTML = body;
   $('#modalFooter').innerHTML = footer;
   $('#modal').classList.add('show');
-  $('#modalFooter [data-action="close-modal"], #modalHeader [data-action="close-modal"]').forEach(b => b.addEventListener('click', closeModal));
+  $$('#modalFooter [data-action="close-modal"]').forEach(b => b.addEventListener('click', closeModal));
 }
 function closeModal() { $('#modal').classList.remove('show'); }
 document.addEventListener('click', e => {
