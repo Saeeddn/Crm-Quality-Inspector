@@ -108,18 +108,25 @@ async function enterApp() {
 }
 
 async function loadAll() {
-  const [d, a, c, i, r, s, iss, rec] = await Promise.all([
+  const [d, a, c, i, r, iss, rec] = await Promise.all([
     api('/reports/dashboard'),
     api('/agents'),
     api('/customers'),
     api('/interactions'),
     api('/rubrics'),
-    api('/interactions').then(() => null), // we fetch scores per interaction lazily
     api('/issues'),
     api('/recommendations'),
   ]);
   State.agents = a; State.customers = c; State.interactions = i;
   State.rubrics = r; State.issues = iss; State.dashboard = d; State.recommendations = rec || [];
+  // Prefetch existing scores in parallel
+  const scorePromises = State.interactions.map(it =>
+    api('/scoring/' + it.id).catch(() => null)
+  );
+  const scores = await Promise.all(scorePromises);
+  State.interactions.forEach((it, idx) => {
+    if (scores[idx]) State.scores[it.id] = scores[idx];
+  });
   renderDashboard();
   renderInteractions();
   renderAgents();
@@ -258,6 +265,9 @@ async function openScore(id) {
   });
   $('#submitScoreBtn').addEventListener('click', async () => {
     const scores = Array.from(document.querySelectorAll('[data-score-range]')).map(r => Number(r.value));
+    const submitBtn = $('#submitScoreBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'در حال ثبت...';
     try {
       const res = await api('/scoring/score', {
         method: 'POST',
@@ -271,9 +281,15 @@ async function openScore(id) {
       });
       State.scores[id] = res;
       closeModal();
-      await loadAll();
+      renderInteractions();
+      renderIssues();
+      renderDashboard();
       toast(`امتیاز ثبت شد: ${res.overall_score} (${res.level})`);
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) {
+      toast(e.message, 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'ثبت ارزیابی';
+    }
   });
 }
 

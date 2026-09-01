@@ -100,10 +100,15 @@ impl Store {
     pub async fn list_agents(&self) -> AppResult<Vec<Agent>> {
         let mut c = self.client.get_multiplexed_async_connection().await?;
         let ids: Vec<String> = c.smembers(SET_AGENTS).await?;
-        let mut out = Vec::with_capacity(ids.len());
-        for id in ids {
-            if let Some(a) = self.get_agent(&id).await? {
-                out.push(a);
+        if ids.is_empty() { return Ok(vec![]); }
+        let keys: Vec<String> = ids.iter().map(|id| format!("{PREFIX_AGENT}{id}")).collect();
+        let values: Vec<Option<String>> = c.mget(&keys).await?;
+        let mut out = Vec::with_capacity(values.len());
+        for v in values {
+            if let Some(s) = v {
+                if let Ok(a) = serde_json::from_str::<Agent>(&s) {
+                    out.push(a);
+                }
             }
         }
         Ok(out)
@@ -138,10 +143,15 @@ impl Store {
     pub async fn list_customers(&self) -> AppResult<Vec<Customer>> {
         let mut c = self.client.get_multiplexed_async_connection().await?;
         let ids: Vec<String> = c.smembers(SET_CUSTOMERS).await?;
-        let mut out = Vec::with_capacity(ids.len());
-        for id in ids {
-            if let Some(x) = self.get_customer(&id).await? {
-                out.push(x);
+        if ids.is_empty() { return Ok(vec![]); }
+        let keys: Vec<String> = ids.iter().map(|id| format!("{PREFIX_CUSTOMER}{id}")).collect();
+        let values: Vec<Option<String>> = c.mget(&keys).await?;
+        let mut out = Vec::with_capacity(values.len());
+        for v in values {
+            if let Some(s) = v {
+                if let Ok(x) = serde_json::from_str::<Customer>(&s) {
+                    out.push(x);
+                }
             }
         }
         Ok(out)
@@ -176,10 +186,15 @@ impl Store {
     pub async fn list_interactions(&self) -> AppResult<Vec<Interaction>> {
         let mut c = self.client.get_multiplexed_async_connection().await?;
         let ids: Vec<String> = c.smembers(SET_INTERACTIONS).await?;
-        let mut out = Vec::with_capacity(ids.len());
-        for id in ids {
-            if let Some(i) = self.get_interaction(&id).await? {
-                out.push(i);
+        if ids.is_empty() { return Ok(vec![]); }
+        let keys: Vec<String> = ids.iter().map(|id| format!("{PREFIX_INTERACTION}{id}")).collect();
+        let values: Vec<Option<String>> = c.mget(&keys).await?;
+        let mut out = Vec::with_capacity(values.len());
+        for v in values {
+            if let Some(s) = v {
+                if let Ok(i) = serde_json::from_str::<Interaction>(&s) {
+                    out.push(i);
+                }
             }
         }
         Ok(out)
@@ -207,10 +222,15 @@ impl Store {
     pub async fn list_rubrics(&self) -> AppResult<Vec<Rubric>> {
         let mut c = self.client.get_multiplexed_async_connection().await?;
         let ids: Vec<String> = c.smembers(SET_RUBRICS).await?;
-        let mut out = Vec::with_capacity(ids.len());
-        for id in ids {
-            if let Some(r) = self.get_rubric(&id).await? {
-                out.push(r);
+        if ids.is_empty() { return Ok(vec![]); }
+        let keys: Vec<String> = ids.iter().map(|id| format!("{PREFIX_RUBRIC}{id}")).collect();
+        let values: Vec<Option<String>> = c.mget(&keys).await?;
+        let mut out = Vec::with_capacity(values.len());
+        for v in values {
+            if let Some(s) = v {
+                if let Ok(r) = serde_json::from_str::<Rubric>(&s) {
+                    out.push(r);
+                }
             }
         }
         Ok(out)
@@ -319,10 +339,15 @@ impl Store {
     pub async fn list_issues(&self) -> AppResult<Vec<Issue>> {
         let mut c = self.client.get_multiplexed_async_connection().await?;
         let ids: Vec<String> = c.smembers(SET_ISSUES).await?;
-        let mut out = Vec::with_capacity(ids.len());
-        for id in ids {
-            if let Some(i) = self.get_issue(&id).await? {
-                out.push(i);
+        if ids.is_empty() { return Ok(vec![]); }
+        let keys: Vec<String> = ids.iter().map(|id| format!("{PREFIX_ISSUE}{id}")).collect();
+        let values: Vec<Option<String>> = c.mget(&keys).await?;
+        let mut out = Vec::with_capacity(values.len());
+        for v in values {
+            if let Some(s) = v {
+                if let Ok(i) = serde_json::from_str::<Issue>(&s) {
+                    out.push(i);
+                }
             }
         }
         Ok(out)

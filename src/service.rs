@@ -355,11 +355,13 @@ impl<'a> Service<'a> {
     // =================== Dashboard ===================
 
     pub async fn dashboard(&self) -> AppResult<serde_json::Value> {
-        let agents = self.store.list_agents().await?;
-        let customers = self.store.list_customers().await?;
-        let interactions = self.store.list_interactions().await?;
-        let scores = self.store.scan_scores().await?;
-        let issues = self.store.list_issues().await?;
+        let (agents, customers, interactions, scores, issues) = tokio::try_join!(
+            self.store.list_agents(),
+            self.store.list_customers(),
+            self.store.list_interactions(),
+            self.store.scan_scores(),
+            self.store.list_issues(),
+        )?;
 
         let n = scores.len();
         let avg = if n > 0 {
