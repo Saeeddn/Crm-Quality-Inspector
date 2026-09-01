@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سامانه مدیریت کیفیت CRM</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<!-- Login screen -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-logo">Q</div>
+      <h1>Quality Inspector</h1>
+      <p>سامانه ارزیابی کیفیت تعاملات CRM</p>
+    </div>
+    <form id="loginForm" class="login-form">
+      <div class="field">
+        <label>نام کاربری</label>
+        <input id="loginUser" type="text" autocomplete="username" value="admin">
+      </div>
+      <div class="field">
+        <label>رمز عبور</label>
+        <input id="loginPass" type="password" autocomplete="current-password" value="ADMIN_PASS_REDACTED">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">ورود</button>
+      <div id="loginError" class="login-error"></div>
+    </form>
+    <div class="login-hint">نام کاربری پیش‌فرض: <code>admin</code> / <code>ADMIN_PASS_REDACTED</code></div>
+  </div>
+</div>
+
+<!-- App shell -->
+<div id="appShell" class="app-shell hidden">
+
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-mark">Q</div>
+      <div>
+        <div class="brand-title">Quality Inspector</div>
+        <div class="brand-sub">سامانه ارزیابی کیفیت</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item active" data-tab="dashboard">داشبورد</a>
+      <a class="nav-item" data-tab="interactions">تعاملات</a>
+      <a class="nav-item" data-tab="agents">کارشناسان</a>
+      <a class="nav-item" data-tab="customers">مشتریان</a>
+      <a class="nav-item" data-tab="recommendations">پیشنهادها</a>
+      <a class="nav-item" data-tab="issues">ایرادات</a>
+      <a class="nav-item" data-tab="rubrics">استانداردها</a>
+      <a class="nav-item" data-tab="report">گزارش کارشناس</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div id="userBadge" class="user-badge"></div>
+      <button id="logoutBtn" class="btn btn-ghost btn-sm">خروج</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-title" id="topbarTitle">داشبورد</div>
+      <div class="topbar-actions">
+        <span id="connStatus" class="conn-status"><span class="dot"></span><span>متصل</span></span>
+      </div>
+    </header>
+
+    <div class="page" id="page-dashboard">
+      <div class="kpi-grid" id="kpiGrid"></div>
+      <div class="card">
+        <div class="card-header"><h3>روند پوشش ارزیابی</h3></div>
+        <div class="card-body" id="coverageBar"></div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-interactions">
+      <div class="toolbar">
+        <h2>تعاملات</h2>
+        <button class="btn btn-primary" data-action="new-interaction">+ ثبت تعامل</button>
+      </div>
+      <div class="filter-bar">
+        <input id="fSearch" placeholder="جستجو...">
+        <select id="fChannel">
+          <option value="">همه کانال‌ها</option>
+          <option>تلفن</option><option>حضوری</option><option>ایمیل</option><option>چت</option><option>پیامک</option>
+        </select>
+        <select id="fAgent"><option value="">همه کارشناسان</option></select>
+        <select id="fStatus">
+          <option value="">همه</option>
+          <option value="scored">ارزیابی‌شده</option>
+          <option value="unscored">ارزیابی‌نشده</option>
+        </select>
+      </div>
+      <div class="card">
+        <table class="data-table" id="interactionsTable">
+          <thead><tr>
+            <th>تاریخ</th><th>کارشناس</th><th>مشتری</th><th>کانال</th><th>موضوع</th><th>کیفیت</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-agents">
+      <div class="toolbar">
+        <h2>کارشناسان</h2>
+        <button class="btn btn-primary" data-action="new-agent">+ ثبت کارشناس</button>
+      </div>
+      <div class="card">
+        <table class="data-table" id="agentsTable">
+          <thead><tr><th>نام</th><th>واحد</th><th>سمت</th><th>وضعیت</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-customers">
+      <div class="toolbar">
+        <h2>مشتریان</h2>
+        <button class="btn btn-primary" data-action="new-customer">+ ثبت مشتری</button>
+      </div>
+      <div class="card">
+        <table class="data-table" id="customersTable">
+          <thead><tr><th>نام</th><th>تلفن</th><th>محصول</th><th>بخش</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-recommendations">
+      <div class="toolbar"><h2>پیشنهادهای QA</h2></div>
+      <div id="recommendationList" class="list"></div>
+    </div>
+
+    <div class="page hidden" id="page-issues">
+      <div class="toolbar"><h2>ایرادات و CAPA</h2></div>
+      <div class="filter-bar">
+        <select id="iStatus">
+          <option value="">همه وضعیت‌ها</option>
+          <option>باز</option><option>بسته</option>
+        </select>
+        <select id="iSeverity">
+          <option value="">همه شدت‌ها</option>
+          <option>بحرانی</option><option>بالا</option><option>متوسط</option><option>پایین</option>
+        </select>
+      </div>
+      <div class="card">
+        <table class="data-table" id="issuesTable">
+          <thead><tr><th>شدت</th><th>دسته</th><th>شرح</th><th>وضعیت</th><th>مهلت</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-rubrics">
+      <div class="toolbar">
+        <h2>استانداردهای ارزیابی</h2>
+        <button class="btn btn-primary" data-action="new-rubric">+ استاندارد جدید</button>
+      </div>
+      <div id="rubricList" class="list"></div>
+    </div>
+
+    <div class="page hidden" id="page-report">
+      <div class="toolbar">
+        <h2>گزارش عملکرد کارشناس</h2>
+        <select id="reportAgent" class="select-inline"></select>
+      </div>
+      <div id="reportBody"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle"></h3>
+      <button class="icon-btn" data-action="close-modal">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
