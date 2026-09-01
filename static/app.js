@@ -1,10 +1,13 @@
-// CRM Quality Inspector - frontend
+// CRM Quality Inspector - frontend v0.3
+// Features: lazy load, localStorage cache, CSV export, Chart.js trend, full-text search
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
 const TOKEN_KEY = 'crm_qi_token';
 const USER_KEY = 'crm_qi_user';
+const CACHE_KEY = 'crm_qi_cache_v1';
+const CACHE_TTL = 60_000; // 60s
 
 const State = {
   token: localStorage.getItem(TOKEN_KEY) || null,
@@ -15,12 +18,40 @@ const State = {
   rubrics: [],
   scores: {},
   issues: [],
+  recommendations: [],
+  dashboard: null,
+  loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, dashboard: false, rec: false },
+  trendChart: null,
 };
 
 function setToken(t, u) {
   State.token = t; State.user = u;
   if (t) { localStorage.setItem(TOKEN_KEY, t); localStorage.setItem(USER_KEY, JSON.stringify(u)); }
   else { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); }
+  invalidateCache();
+}
+
+function invalidateCache() { localStorage.removeItem(CACHE_KEY); }
+
+function cacheGet(key) {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    const entry = obj[key];
+    if (!entry) return null;
+    if (Date.now() - entry.t > CACHE_TTL) return null;
+    return entry.v;
+  } catch { return null; }
+}
+
+function cacheSet(key, value) {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY) || '{}';
+    const obj = JSON.parse(raw);
+    obj[key] = { t: Date.now(), v: value };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(obj));
+  } catch {}
 }
 
 async function api(url, opts = {}) {
@@ -43,9 +74,8 @@ function esc(s) {
 }
 function fmtDate(iso) {
   if (!iso) return '-';
-  try {
-    return new Date(iso).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' });
-  } catch { return iso; }
+  try { return new Date(iso).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' }); }
+  catch { return iso; }
 }
 function scorePill(v, critical) {
   if (v == null) return '<span class="pill pill-muted">ارزیابی‌نشده</span>';
@@ -59,7 +89,6 @@ function sevPill(s) {
 function statusPill(s) {
   return s === 'باز' ? '<span class="pill pill-warn">باز</span>' : '<span class="pill pill-good">بسته</span>';
 }
-
 function toast(msg, type = 'success') {
   const t = $('#toast');
   t.textContent = msg;
@@ -86,6 +115,10 @@ $('#loginForm').addEventListener('submit', async (e) => {
 
 function logout() {
   setToken(null, null);
+  State.agents = []; State.customers = []; State.interactions = [];
+  State.rubrics = []; State.scores = {}; State.issues = [];
+  State.dashboard = null; State.recommendations = [];
+  Object.keys(State.loaded).forEach(k => State.loaded[k] = false);
   $('#loginScreen').classList.remove('hidden');
   $('#appShell').classList.add('hidden');
 }
@@ -95,44 +128,78 @@ async function enterApp() {
   $('#loginScreen').classList.add('hidden');
   $('#appShell').classList.remove('hidden');
   $('#userBadge').textContent = State.user?.username || '';
+  // Load only dashboard at boot
+  await loadDashboard();
+  switchTab('dashboard');
+}
+
+async function loadDashboard() {
+  if (State.loaded.dashboard) {
+    renderDashboard();
+    return;
+  }
+  const cached = cacheGet('dashboard');
+  if (cached) { State.dashboard = cached; State.loaded.dashboard = true; renderDashboard(); return; }
   try {
-    await loadAll();
-    switchTab('dashboard');
+    const d = await api('/reports/dashboard');
+    State.dashboard = d;
+    State.loaded.dashboard = true;
+    cacheSet('dashboard', d);
+    renderDashboard();
   } catch (e) {
-    if (e.message.includes('invalid or expired') || e.message.includes('missing bearer')) {
-      logout();
-    } else {
-      toast(e.message, 'error');
-    }
+    if (e.message.includes('invalid or expired') || e.message.includes('missing bearer')) logout();
+    else toast(e.message, 'error');
   }
 }
 
-async function loadAll() {
-  const [d, a, c, i, r, iss, rec] = await Promise.all([
-    api('/reports/dashboard'),
-    api('/agents'),
-    api('/customers'),
-    api('/interactions'),
-    api('/rubrics'),
-    api('/issues'),
-    api('/recommendations'),
-  ]);
-  State.agents = a; State.customers = c; State.interactions = i;
-  State.rubrics = r; State.issues = iss; State.dashboard = d; State.recommendations = rec || [];
-  // Prefetch existing scores in parallel
-  const scorePromises = State.interactions.map(it =>
-    api('/scoring/' + it.id).catch(() => null)
-  );
-  const scores = await Promise.all(scorePromises);
-  State.interactions.forEach((it, idx) => {
-    if (scores[idx]) State.scores[it.id] = scores[idx];
-  });
-  renderDashboard();
-  renderInteractions();
+async function loadAgents() {
+  if (State.loaded.agents) { renderAgents(); return; }
+  const c = cacheGet('agents'); if (c) { State.agents = c; State.loaded.agents = true; renderAgents(); return; }
+  State.agents = await api('/agents'); State.loaded.agents = true; cacheSet('agents', State.agents);
   renderAgents();
+}
+
+async function loadCustomers() {
+  if (State.loaded.customers) { renderCustomers(); return; }
+  const c = cacheGet('customers'); if (c) { State.customers = c; State.loaded.customers = true; renderCustomers(); return; }
+  State.customers = await api('/customers'); State.loaded.customers = true; cacheSet('customers', State.customers);
   renderCustomers();
+}
+
+async function loadInteractions() {
+  if (State.loaded.interactions) { renderInteractions(); return; }
+  const c = cacheGet('interactions'); if (c) { State.interactions = c; State.loaded.interactions = true; renderInteractions(); return; }
+  State.interactions = await api('/interactions');
+  State.loaded.interactions = true;
+  cacheSet('interactions', State.interactions);
+  // lazy-load scores in background
+  loadAllScoresLazy();
+  renderInteractions();
+}
+
+async function loadAllScoresLazy() {
+  const promises = State.interactions.map(it =>
+    api('/scoring/' + it.id).then(s => { if (s) State.scores[it.id] = s; }).catch(() => null)
+  );
+  await Promise.all(promises);
+  renderInteractions();
+}
+
+async function loadIssues() {
+  if (State.loaded.issues) { renderIssues(); return; }
+  State.issues = await api('/issues'); State.loaded.issues = true;
   renderIssues();
+}
+
+async function loadRubrics() {
+  if (State.loaded.rubrics) { renderRubrics(); return; }
+  State.rubrics = await api('/rubrics'); State.loaded.rubrics = true;
   renderRubrics();
+}
+
+async function loadRecommendations() {
+  if (State.loaded.rec) { renderRecommendations(); return; }
+  State.recommendations = await api('/recommendations'); State.loaded.rec = true;
   renderRecommendations();
 }
 
@@ -146,7 +213,15 @@ function switchTab(tab) {
     customers: 'مشتریان', recommendations: 'پیشنهادهای QA', issues: 'ایرادات',
     rubrics: 'استانداردها', report: 'گزارش کارشناس',
   }[tab] || tab;
-  if (tab === 'report') populateReportAgents();
+  // Lazy load
+  if (tab === 'dashboard') loadDashboard();
+  else if (tab === 'interactions') loadInteractions();
+  else if (tab === 'agents') loadAgents();
+  else if (tab === 'customers') loadCustomers();
+  else if (tab === 'issues') loadIssues();
+  else if (tab === 'rubrics') loadRubrics();
+  else if (tab === 'recommendations') loadRecommendations();
+  else if (tab === 'report') { loadAgents().then(populateReportAgents); }
 }
 
 $$('.nav-item').forEach(n => n.addEventListener('click', () => switchTab(n.dataset.tab)));
@@ -175,25 +250,63 @@ function renderDashboard() {
     </div>
     <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, d.coverage || 0)}%"></div></div>
   `;
+  // Trend chart (uses local scores if loaded; otherwise placeholder)
+  renderTrendChart();
+}
+
+function renderTrendChart() {
+  const canvas = $('#trendChart');
+  if (!canvas) return;
+  if (State.trendChart) { State.trendChart.destroy(); State.trendChart = null; }
+  const scores = Object.values(State.scores);
+  if (scores.length < 2) {
+    canvas.getContext('2d').fillText('برای نمایش نمودار، حداقل ۲ ارزیابی لازم است', 10, 30);
+    return;
+  }
+  const sorted = scores.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const labels = sorted.map(s => fmtDate(s.created_at));
+  const data = sorted.map(s => s.overall_score);
+  State.trendChart = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets: [{
+      label: 'میانگین امتیاز کیفیت',
+      data,
+      borderColor: '#6366f1',
+      backgroundColor: 'rgba(99,102,241,0.15)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 4,
+      pointBackgroundColor: '#8b5cf6',
+    }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#e6e8ee' } } },
+      scales: {
+        x: { ticks: { color: '#8a92a6' }, grid: { color: '#2a2f3d' } },
+        y: { min: 0, max: 100, ticks: { color: '#8a92a6' }, grid: { color: '#2a2f3d' } },
+      },
+    },
+  });
 }
 
 // ============ Interactions ============
 function renderInteractions() {
   const tbody = $('#interactionsTable tbody');
-  const search = $('#fSearch')?.value?.toLowerCase() || '';
+  if (!tbody) return;
+  const search = ($('#fSearch')?.value || '').toLowerCase();
   const channel = $('#fChannel')?.value || '';
   const agentId = $('#fAgent')?.value || '';
   const status = $('#fStatus')?.value || '';
 
   // populate agent filter
   const sel = $('#fAgent');
-  if (sel && sel.options.length <= 1) {
+  if (sel && sel.options.length <= 1 && State.agents.length) {
     sel.innerHTML = '<option value="">همه کارشناسان</option>' + State.agents
       .filter(a => a.active).map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
   }
 
   let rows = State.interactions.slice();
-  if (search) rows = rows.filter(i => (i.subject + ' ' + i.transcript).toLowerCase().includes(search));
+  if (search) rows = rows.filter(i => (i.subject + ' ' + i.transcript + ' ' + (i.tags||[]).join(' ')).toLowerCase().includes(search));
   if (channel) rows = rows.filter(i => i.channel === channel);
   if (agentId) rows = rows.filter(i => i.agent_id === agentId);
   if (status === 'scored') rows = rows.filter(i => State.scores[i.id]);
@@ -226,14 +339,45 @@ $('#fSearch')?.addEventListener('input', renderInteractions);
 $('#fChannel')?.addEventListener('change', renderInteractions);
 $('#fAgent')?.addEventListener('change', renderInteractions);
 $('#fStatus')?.addEventListener('change', renderInteractions);
+$('#exportCsvBtn')?.addEventListener('click', exportCsv);
+
+function exportCsv() {
+  if (!State.interactions.length) { toast('ابتدا تعاملات را بارگذاری کنید', 'error'); return; }
+  const rows = [['شناسه', 'تاریخ', 'کارشناس', 'مشتری', 'کانال', 'موضوع', 'امتیاز', 'سطح', 'بحرانی', 'یادداشت']];
+  for (const i of State.interactions) {
+    const s = State.scores[i.id];
+    const agent = State.agents.find(a => a.id === i.agent_id);
+    const customer = State.customers.find(c => c.id === i.customer_id);
+    rows.push([
+      i.id, fmtDate(i.created_at), agent?.name || '', customer?.name || '',
+      i.channel, i.subject,
+      s ? s.overall_score : '',
+      s ? s.level : '',
+      s ? (s.critical_fail ? 'بله' : 'خیر') : '',
+      s?.notes || '',
+    ]);
+  }
+  const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `interactions-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('فایل CSV دانلود شد');
+}
 
 async function openScore(id) {
   const interaction = State.interactions.find(i => i.id === id);
   if (!interaction) return;
+  await loadRubrics();
   const customer = State.customers.find(c => c.id === interaction.customer_id);
   const r = State.rubrics.find(x => x.active && (!x.product_type || x.product_type === customer?.product_type))
     || State.rubrics.find(x => x.active) || State.rubrics[0];
   if (!r) { toast('استانداردی یافت نشد', 'error'); return; }
+  // Make sure score is loaded
+  if (!State.scores[id]) {
+    try { State.scores[id] = await api('/scoring/' + id); } catch {}
+  }
   const old = State.scores[id];
   const criteria = r.criteria || [];
   openModal('ارزیابی کیفیت تعامل', `
@@ -272,18 +416,16 @@ async function openScore(id) {
       const res = await api('/scoring/score', {
         method: 'POST',
         body: JSON.stringify({
-          interaction_id: id,
-          rubric_id: r.id,
-          scores,
+          interaction_id: id, rubric_id: r.id, scores,
           evaluator: State.user?.username,
           notes: $('#scoreNotes').value.trim(),
         })
       });
       State.scores[id] = res;
+      invalidateCache();
       closeModal();
       renderInteractions();
-      renderIssues();
-      renderDashboard();
+      renderTrendChart();
       toast(`امتیاز ثبت شد: ${res.overall_score} (${res.level})`);
     } catch (e) {
       toast(e.message, 'error');
@@ -296,6 +438,7 @@ async function openScore(id) {
 async function openView(id) {
   const i = State.interactions.find(x => x.id === id);
   if (!i) return;
+  await loadAgents(); await loadCustomers();
   const agent = State.agents.find(a => a.id === i.agent_id);
   const customer = State.customers.find(c => c.id === i.customer_id);
   const s = State.scores[id];
@@ -324,6 +467,7 @@ async function openView(id) {
 // ============ Agents ============
 function renderAgents() {
   const tbody = $('#agentsTable tbody');
+  if (!tbody) return;
   tbody.innerHTML = State.agents.map(a => `
     <tr>
       <td><b>${esc(a.name)}</b></td>
@@ -343,7 +487,8 @@ function renderAgents() {
 async function toggleAgent(id, active) {
   try {
     await api('/agents/' + id, { method: 'PATCH', body: JSON.stringify({ active }) });
-    await loadAll();
+    State.agents = await api('/agents'); cacheSet('agents', State.agents);
+    renderAgents();
     toast(active ? 'فعال شد' : 'غیرفعال شد');
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -360,7 +505,9 @@ function openNewAgent() {
       await api('/agents', { method: 'POST', body: JSON.stringify({
         name: $('#aName').value.trim(), department: $('#aDept').value, position: $('#aPos').value.trim()
       })});
-      closeModal(); await loadAll(); toast('کارشناس ثبت شد');
+      State.loaded.agents = false;
+      closeModal(); await loadAgents();
+      toast('کارشناس ثبت شد');
     } catch (e) { toast(e.message, 'error'); }
   });
 }
@@ -368,6 +515,7 @@ function openNewAgent() {
 // ============ Customers ============
 function renderCustomers() {
   const tbody = $('#customersTable tbody');
+  if (!tbody) return;
   tbody.innerHTML = State.customers.map(c => `
     <tr>
       <td><b>${esc(c.name)}</b>${c.notes ? `<div style="color:var(--text-muted);font-size:12px">${esc(c.notes)}</div>` : ''}</td>
@@ -381,7 +529,7 @@ function renderCustomers() {
   `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">مشتری یافت نشد</td></tr>`;
   tbody.querySelectorAll('[data-del-customer]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('حذف شود؟')) return;
-    try { await api('/customers/' + b.dataset.delCustomer, { method: 'DELETE' }); await loadAll(); toast('حذف شد'); }
+    try { await api('/customers/' + b.dataset.delCustomer, { method: 'DELETE' }); State.loaded.customers = false; await loadCustomers(); toast('حذف شد'); }
     catch (e) { toast(e.message, 'error'); }
   }));
 }
@@ -402,15 +550,17 @@ function openNewCustomer() {
         product_type: $('#cProduct').value.trim(), segment: $('#cSeg').value,
         notes: $('#cNotes').value.trim()
       })});
-      closeModal(); await loadAll(); toast('مشتری ثبت شد');
+      State.loaded.customers = false;
+      closeModal(); await loadCustomers(); toast('مشتری ثبت شد');
     } catch (e) { toast(e.message, 'error'); }
   });
 }
 
-// ============ Interactions New ============
+// ============ New Interaction ============
 function openNewInteraction() {
   if (!State.agents.length || !State.customers.length) {
-    toast('ابتدا کارشناس و مشتری ثبت کنید', 'error'); return;
+    Promise.all([loadAgents(), loadCustomers()]).then(openNewInteraction);
+    return;
   }
   openModal('ثبت تعامل جدید', `
     <div class="field"><label>کارشناس</label><select id="iAgent">${State.agents.filter(a => a.active).map(a => `<option value="${a.id}">${esc(a.name)} — ${esc(a.department)}</option>`).join('')}</select></div>
@@ -429,7 +579,10 @@ function openNewInteraction() {
         agent_id: $('#iAgent').value, customer_id: $('#iCust').value,
         channel: $('#iCh').value, subject: sub, transcript: tr, tags: []
       })});
-      closeModal(); await loadAll(); toast('تعامل ثبت شد');
+      State.loaded.interactions = false;
+      State.loaded.dashboard = false;
+      closeModal(); await loadInteractions(); await loadDashboard();
+      toast('تعامل ثبت شد');
     } catch (e) { toast(e.message, 'error'); }
   });
 }
@@ -437,6 +590,7 @@ function openNewInteraction() {
 // ============ Recommendations ============
 function renderRecommendations() {
   const list = $('#recommendationList');
+  if (!list) return;
   if (!State.recommendations.length) {
     list.innerHTML = '<div class="list-item" style="text-align:center;color:var(--text-muted)">پیشنهادی وجود ندارد</div>';
     return;
@@ -464,6 +618,7 @@ function renderRecommendations() {
 // ============ Issues ============
 function renderIssues() {
   const tbody = $('#issuesTable tbody');
+  if (!tbody) return;
   const status = $('#iStatus')?.value || '';
   const sev = $('#iSeverity')?.value || '';
   let rows = State.issues.slice();
@@ -501,7 +656,9 @@ function openResolve(id) {
       const act = $('#capAct').value.trim();
       if (!root) throw new Error('علت ریشه‌ای الزامی است');
       await api('/issues/' + id + '/resolve', { method: 'PATCH', body: JSON.stringify({ root_cause: root, corrective_action: act })});
-      closeModal(); await loadAll(); toast('ایراد بسته شد');
+      State.loaded.issues = false;
+      closeModal(); await loadIssues(); await loadDashboard();
+      toast('ایراد بسته شد');
     } catch (e) { toast(e.message, 'error'); }
   });
 }
@@ -509,6 +666,7 @@ function openResolve(id) {
 // ============ Rubrics ============
 function renderRubrics() {
   const list = $('#rubricList');
+  if (!list) return;
   if (!State.rubrics.length) {
     list.innerHTML = '<div class="list-item" style="text-align:center;color:var(--text-muted)">استانداردی یافت نشد</div>';
     return;
@@ -536,6 +694,7 @@ function renderRubrics() {
 // ============ Report ============
 function populateReportAgents() {
   const sel = $('#reportAgent');
+  if (!sel) return;
   sel.innerHTML = '<option value="">انتخاب کارشناس...</option>' + State.agents.map(a => `<option value="${a.id}">${esc(a.name)} — ${esc(a.department)}</option>`).join('');
   if (!sel.dataset.bound) {
     sel.addEventListener('change', renderReport);
@@ -548,7 +707,7 @@ function populateReportAgents() {
 }
 
 async function renderReport() {
-  const id = $('#reportAgent').value;
+  const id = $('#reportAgent')?.value;
   if (!id) { $('#reportBody').innerHTML = ''; return; }
   try {
     const r = await api('/reports/agent/' + id);

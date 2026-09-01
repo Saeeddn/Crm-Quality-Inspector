@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>سامانه مدیریت کیفیت CRM</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
@@ -75,15 +76,22 @@
         <div class="card-header"><h3>روند پوشش ارزیابی</h3></div>
         <div class="card-body" id="coverageBar"></div>
       </div>
+      <div class="card">
+        <div class="card-header"><h3>نمودار روند امتیازات</h3></div>
+        <div class="card-body" style="height:260px"><canvas id="trendChart"></canvas></div>
+      </div>
     </div>
 
     <div class="page hidden" id="page-interactions">
       <div class="toolbar">
         <h2>تعاملات</h2>
-        <button class="btn btn-primary" data-action="new-interaction">+ ثبت تعامل</button>
+        <div>
+          <button class="btn btn-secondary" id="exportCsvBtn">خروجی CSV</button>
+          <button class="btn btn-primary" data-action="new-interaction">+ ثبت تعامل</button>
+        </div>
       </div>
       <div class="filter-bar">
-        <input id="fSearch" placeholder="جستجو...">
+        <input id="fSearch" placeholder="جستجو در موضوع، متن و تگ‌ها...">
         <select id="fChannel">
           <option value="">همه کانال‌ها</option>
           <option>تلفن</option><option>حضوری</option><option>ایمیل</option><option>چت</option><option>پیامک</option>
@@ -190,6 +198,7 @@
 <!-- Toast -->
 <div id="toast" class="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
