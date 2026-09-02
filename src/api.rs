@@ -334,9 +334,11 @@ pub async fn get_score_by_interaction(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> AppResult<Json<serde_json::Value>> {
+    // Empty body (success: true, data: null) when not yet scored —
+    // this is an expected state for unscored interactions, not an error.
     match state.store.get_score_by_interaction(&id).await? {
         Some(s) => Ok(ok(s)),
-        None => Err(AppError::NotFound("ارزیابی یافت نشد".into())),
+        None => Ok(ok(serde_json::Value::Null)),
     }
 }
 
