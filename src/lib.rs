@@ -17,8 +17,8 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn new(redis_url: &str) -> Result<Self, error::AppError> {
-        let store = Store::connect(redis_url).await?;
+    pub async fn new(database_url: &str) -> Result<Self, error::AppError> {
+        let store = Store::connect(database_url).await?;
         let sessions = Arc::new(auth::SessionStore::new());
         let s = Self { store: Arc::new(store), sessions };
         s.seed_defaults().await?;

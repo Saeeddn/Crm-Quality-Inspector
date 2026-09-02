@@ -5,8 +5,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("redis: {0}")]
-    Redis(#[from] redis::RedisError),
+    #[error("database: {0}")]
+    Database(#[from] sqlx::Error),
 
     #[error("serde: {0}")]
     Serde(#[from] serde_json::Error),

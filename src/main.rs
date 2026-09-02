@@ -8,8 +8,10 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer().with_target(false))
         .init();
 
-    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".to_string());
-    let state = AppState::new(&redis_url).await.expect("failed to init state");
+    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://PG_USER_REDACTED:PG_REDACTED_OLD@127.0.0.1:5432/crm_quality_inspector".to_string()
+    });
+    let state = AppState::new(&database_url).await.expect("failed to init state");
 
     let app = build_app(state);
 

@@ -75,8 +75,17 @@ fn ok<T: serde::Serialize>(data: T) -> Json<serde_json::Value> {
 
 // ============ Health & Auth ============
 
-pub async fn health() -> Json<serde_json::Value> {
-    ok(json!({ "status": "ok" }))
+pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
+    // Real connectivity check
+    let db_ok = sqlx::query("SELECT 1")
+        .fetch_one(&state.store.pool)
+        .await
+        .is_ok();
+    if db_ok {
+        ok(json!({ "status": "ok", "database": "connected" }))
+    } else {
+        ok(json!({ "status": "degraded", "database": "disconnected" }))
+    }
 }
 
 pub async fn login(
