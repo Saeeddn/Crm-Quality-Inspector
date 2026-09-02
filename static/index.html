@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>سامانه مدیریت کیفیت CRM</title>
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=3">
-<link rel="stylesheet" href="/static/app.css?v=3">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=5">
+<link rel="stylesheet" href="/static/app.css?v=5">
 </head>
 <body>
 
@@ -20,16 +20,15 @@
     <form id="loginForm" class="login-form">
       <div class="field">
         <label>نام کاربری</label>
-        <input id="loginUser" type="text" autocomplete="username" value="admin">
+        <input id="loginUser" type="text" autocomplete="username">
       </div>
       <div class="field">
         <label>رمز عبور</label>
-        <input id="loginPass" type="password" autocomplete="current-password" value="ADMIN_PASS_REDACTED">
+        <input id="loginPass" type="password" autocomplete="current-password">
       </div>
       <button type="submit" class="btn btn-primary btn-block">ورود</button>
       <div id="loginError" class="login-error"></div>
     </form>
-    <div class="login-hint">نام کاربری پیش‌فرض: <code>admin</code> / <code>ADMIN_PASS_REDACTED</code></div>
   </div>
 </div>
 
@@ -53,6 +52,7 @@
       <a class="nav-item" data-tab="issues">ایرادات</a>
       <a class="nav-item" data-tab="rubrics">استانداردها</a>
       <a class="nav-item" data-tab="report">گزارش کارشناس</a>
+      <a class="nav-item" data-tab="users">کاربران</a>
     </nav>
     <div class="sidebar-footer">
       <div id="userBadge" class="user-badge"></div>
@@ -185,6 +185,20 @@
       <div id="reportBody"></div>
     </div>
 
+    <div class="page hidden" id="page-users">
+      <div class="toolbar">
+        <h2>مدیریت کاربران</h2>
+        <button class="btn btn-primary" id="newUserBtn">+ کاربر جدید</button>
+      </div>
+      <p style="color:var(--text-muted);margin:8px 0 16px">فقط مدیر سیستم دسترسی دارد. آخرین مدیر سیستم قابل حذف نیست.</p>
+      <div class="card">
+        <table class="data-table" id="usersTable">
+          <thead><tr><th>نام کاربری</th><th>نقش</th><th>تاریخ ایجاد</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -204,6 +218,6 @@
 <div id="toast" class="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=4"></script>
+<script src="/static/app.js?v=5"></script>
 </body>
 </html>

@@ -145,6 +145,19 @@ pub struct RegisterRequest {
     pub is_admin: bool,
 }
 
+#[derive(Deserialize)]
+pub struct CreateUserRequest {
+    pub username: String,
+    pub password: String,
+    pub is_admin: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateUserRequest {
+    pub password: Option<String>,
+    pub is_admin: Option<bool>,
+}
+
 // =====================
 // Agent (نماینده / کارشناس)
 // =====================

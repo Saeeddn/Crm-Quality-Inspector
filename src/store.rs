@@ -70,6 +70,30 @@ impl Store {
         Ok(v)
     }
 
+    pub async fn list_users_full(&self) -> AppResult<Vec<User>> {
+        let usernames = self.list_users().await?;
+        if usernames.is_empty() { return Ok(vec![]); }
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        let keys: Vec<String> = usernames.iter().map(|u| format!("{PREFIX_USER}{u}")).collect();
+        let vals: Vec<Option<String>> = c.mget(keys).await?;
+        let mut users = Vec::new();
+        for v in vals {
+            if let Some(s) = v {
+                if let Ok(u) = serde_json::from_str::<User>(&s) {
+                    users.push(u);
+                }
+            }
+        }
+        Ok(users)
+    }
+
+    pub async fn delete_user(&self, username: &str) -> AppResult<()> {
+        let mut c = self.client.get_multiplexed_async_connection().await?;
+        let _: () = c.del(format!("{PREFIX_USER}{username}")).await?;
+        let _: () = c.srem(SET_USERS, username).await?;
+        Ok(())
+    }
+
     pub async fn ensure_admin(&self, username: &str, password: &str) -> AppResult<()> {
         if self.user_exists(username).await? {
             return Ok(());

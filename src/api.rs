@@ -20,6 +20,8 @@ pub fn router() -> Router<AppState> {
         .route("/auth/login", post(login))
         .route("/auth/register", post(register))
         .route("/me", get(me))
+        .route("/users", get(list_users).post(create_user))
+        .route("/users/:username", patch(update_user_handler).delete(delete_user_handler))
         .route("/agents", get(list_agents).post(create_agent))
         .route("/agents/:id", get(get_agent).patch(patch_agent).delete(delete_agent))
         .route("/customers", get(list_customers).post(create_customer))
@@ -126,6 +128,57 @@ pub async fn register(
 
 pub async fn me(Extension(me): Extension<Arc<CurrentUser>>) -> Json<serde_json::Value> {
     ok(json!({ "username": me.username, "is_admin": me.is_admin }))
+}
+
+// ============ Users ============
+
+pub async fn list_users(
+    State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !me.is_admin {
+        return Err(AppError::Forbidden("فقط مدیر سیستم دسترسی دارد".into()));
+    }
+    let s = Service::new(&state.store);
+    Ok(ok(s.list_users().await?))
+}
+
+pub async fn create_user(
+    State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>,
+    Json(req): Json<CreateUserRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !me.is_admin {
+        return Err(AppError::Forbidden("فقط مدیر سیستم دسترسی دارد".into()));
+    }
+    let s = Service::new(&state.store);
+    Ok(ok(s.create_user(req).await?))
+}
+
+pub async fn update_user_handler(
+    State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>,
+    Path(username): Path<String>,
+    Json(req): Json<UpdateUserRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !me.is_admin {
+        return Err(AppError::Forbidden("فقط مدیر سیستم دسترسی دارد".into()));
+    }
+    let s = Service::new(&state.store);
+    Ok(ok(s.update_user(&username, req).await?))
+}
+
+pub async fn delete_user_handler(
+    State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>,
+    Path(username): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !me.is_admin {
+        return Err(AppError::Forbidden("فقط مدیر سیستم دسترسی دارد".into()));
+    }
+    let s = Service::new(&state.store);
+    s.delete_user(&username).await?;
+    Ok(ok(serde_json::json!({ "deleted": username })))
 }
 
 // ============ Agents ============

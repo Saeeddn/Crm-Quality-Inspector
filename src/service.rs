@@ -697,6 +697,62 @@ impl<'a> Service<'a> {
 
     // =================== Customers ===================
 
+    // =================== Users ===================
+
+    pub async fn list_users(&self) -> AppResult<Vec<User>> {
+        self.store.list_users_full().await
+    }
+
+    pub async fn create_user(&self, req: CreateUserRequest) -> AppResult<User> {
+        let username = req.username.trim();
+        let password = req.password;
+        if username.is_empty() || username.len() < 3 {
+            return Err(AppError::Validation("نام کاربری باید حداقل ۳ کاراکتر باشد".into()));
+        }
+        if password.len() < 4 {
+            return Err(AppError::Validation("رمز عبور باید حداقل ۴ کاراکتر باشد".into()));
+        }
+        if self.store.user_exists(username).await? {
+            return Err(AppError::Validation("این نام کاربری قبلاً ثبت شده".into()));
+        }
+        let user = User {
+            username: username.to_string(),
+            password_hash: crate::auth::hash_password(&password).map_err(|e| AppError::Internal(e.to_string()))?,
+            is_admin: req.is_admin.unwrap_or(false),
+            created_at: Utc::now(),
+        };
+        self.store.put_user(&user).await?;
+        Ok(user)
+    }
+
+    pub async fn update_user(&self, username: &str, req: UpdateUserRequest) -> AppResult<User> {
+        let mut u = self.store.get_user(username).await?
+            .ok_or_else(|| AppError::NotFound("کاربر یافت نشد".into()))?;
+        if let Some(p) = req.password {
+            if p.len() < 4 { return Err(AppError::Validation("رمز عبور باید حداقل ۴ کاراکتر باشد".into())); }
+            u.password_hash = crate::auth::hash_password(&p).map_err(|e| AppError::Internal(e.to_string()))?;
+        }
+        if let Some(admin) = req.is_admin {
+            u.is_admin = admin;
+        }
+        self.store.put_user(&u).await?;
+        Ok(u)
+    }
+
+    pub async fn delete_user(&self, username: &str) -> AppResult<()> {
+        // جلوگیری از حذف آخرین ادمین
+        let users = self.store.list_users_full().await?;
+        let target = users.iter().find(|u| u.username == username)
+            .ok_or_else(|| AppError::NotFound("کاربر یافت نشد".into()))?;
+        if target.is_admin {
+            let admin_count = users.iter().filter(|u| u.is_admin).count();
+            if admin_count <= 1 {
+                return Err(AppError::Validation("آخرین مدیر سیستم قابل حذف نیست".into()));
+            }
+        }
+        self.store.delete_user(username).await
+    }
+
     pub async fn create_customer(&self, req: CreateCustomerRequest) -> AppResult<Customer> {
         if req.name.trim().is_empty() {
             return Err(AppError::Validation("نام مشتری الزامی است".into()));

@@ -6,6 +6,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use std::sync::Arc;
 use chrono::{Duration, Utc};
 use rand::Rng;
 use sha2::{Digest, Sha256};
@@ -80,10 +81,10 @@ pub async fn auth_middleware_inner(
         .sessions
         .validate(&token)
         .ok_or_else(|| AppError::Auth("invalid or expired session".into()))?;
-    req.extensions_mut().insert(CurrentUser {
+    req.extensions_mut().insert(Arc::new(CurrentUser {
         username: session.username,
         is_admin: session.is_admin,
-    });
+    }));
     Ok(next.run(req).await)
 }
 

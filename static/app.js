@@ -196,7 +196,8 @@ function switchTab(tab) {
   $('#topbarTitle').textContent = {
     dashboard: 'داشبورد', interactions: 'تعاملات', agents: 'کارشناسان',
     customers: 'مشتریان', recommendations: 'پیشنهادهای QA', issues: 'ایرادات',
-    rubrics: 'پارامترهای اندازه‌گیری', report: 'گزارش کارشناس',
+    rubrics: 'پارامترهای اندازهگیری', report: 'گزارش کارشناس',
+    users: 'مدیریت کاربران',
   }[tab] || tab;
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'interactions') loadInteractions();
@@ -206,6 +207,7 @@ function switchTab(tab) {
   else if (tab === 'rubrics') loadKpis();
   else if (tab === 'recommendations') loadRecommendations();
   else if (tab === 'report') loadAgents().then(populateReportAgents);
+  else if (tab === 'users') loadUsers();
 }
 
 $$('.nav-item').forEach(n => n.addEventListener('click', () => switchTab(n.dataset.tab)));
@@ -874,7 +876,119 @@ document.addEventListener('click', e => {
   if (e.target.dataset?.action === 'close-modal') closeModal();
 });
 
+// ============ Users ============
+
+let StateUsers = [];
+
+async function loadUsers() {
+  try {
+    StateUsers = await api('/users');
+    renderUsers();
+  } catch (e) {
+    if (e.message.includes('مدیر سیستم')) {
+      $('#page-users').innerHTML = '<div class="card" style="text-align:center;padding:40px;color:var(--text-muted)">فقط مدیر سیستم دسترسی دارد</div>';
+    } else { toast(e.message, 'error'); }
+  }
+}
+
+function renderUsers() {
+  const tbody = $('#usersTable tbody');
+  if (!tbody) return;
+  tbody.innerHTML = StateUsers.map(u => `
+    <tr>
+      <td><b>${esc(u.username)}</b></td>
+      <td>${u.is_admin ? '<span class="pill pill-info">مدیر سیستم</span>' : '<span class="pill pill-muted">کاربر عادی</span>'}</td>
+      <td>${fmtDate(u.created_at)}</td>
+      <td class="row-actions">
+        <button class="btn btn-sm" data-edit-user="${u.username}">تغییر رمز / نقش</button>
+        <button class="btn btn-sm" data-del-user="${u.username}">حذف</button>
+      </td>
+    </tr>
+  `).join('') || `<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">کاربری یافت نشد</td></tr>`;
+  tbody.querySelectorAll('[data-edit-user]').forEach(b => b.addEventListener('click', () => openEditUser(b.dataset.editUser)));
+  tbody.querySelectorAll('[data-del-user]').forEach(b => b.addEventListener('click', async () => {
+    const u = b.dataset.delUser;
+    if (u === State.user?.username) { toast('نمیتوانید خودتان را حذف کنید', 'error'); return; }
+    if (!confirm(`کاربر "${u}" حذف شود؟`)) return;
+    try {
+      await api('/users/' + encodeURIComponent(u), { method: 'DELETE' });
+      await loadUsers();
+      toast('کاربر حذف شد');
+    } catch (e) { toast(e.message, 'error'); }
+  }));
+}
+
+$('#newUserBtn')?.addEventListener('click', () => openNewUser());
+
+function openNewUser() {
+  openModal('ایجاد کاربر جدید', `
+    <div class="field"><label>نام کاربری (حداقل ۳ کاراکتر)</label><input id="uName" autocomplete="off"></div>
+    <div class="field"><label>رمز عبور (حداقل ۴ کاراکتر)</label><input id="uPass" type="password" autocomplete="new-password"></div>
+    <div class="field"><label><input type="checkbox" id="uAdmin"> دسترسی مدیر سیستم</label></div>
+  `, `<button class="btn btn-primary" id="saveUser">ایجاد</button>
+      <button class="btn" data-action="close-modal">انصراف</button>`);
+  $('#saveUser').addEventListener('click', async () => {
+    try {
+      const username = $('#uName').value.trim();
+      const password = $('#uPass').value;
+      if (!username || !password) { toast('نام کاربری و رمز الزامی است', 'error'); return; }
+      await api('/users', { method: 'POST', body: JSON.stringify({
+        username, password, is_admin: $('#uAdmin').checked
+      })});
+      closeModal(); await loadUsers();
+      toast('کاربر ایجاد شد');
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
+function openEditUser(username) {
+  const u = StateUsers.find(x => x.username === username);
+  if (!u) return;
+  openModal(`ویرایش کاربر: ${username}`, `
+    <div class="field"><label>نام کاربری</label><input value="${esc(username)}" disabled></div>
+    <div class="field"><label>رمز عبور جدید (خالی = بدون تغییر)</label><input id="uPassNew" type="password" autocomplete="new-password"></div>
+    <div class="field"><label><input type="checkbox" id="uAdmin" ${u.is_admin ? 'checked' : ''}> دسترسی مدیر سیستم</label></div>
+  `, `<button class="btn btn-primary" id="updateUser">ذخیره</button>
+      <button class="btn" data-action="close-modal">انصراف</button>`);
+  $('#updateUser').addEventListener('click', async () => {
+    try {
+      const newPass = $('#uPassNew').value;
+      const body = { is_admin: $('#uAdmin').checked };
+      if (newPass) body.password = newPass;
+      await api('/users/' + encodeURIComponent(username), { method: 'PATCH', body: JSON.stringify(body) });
+      closeModal(); await loadUsers();
+      toast('کاربر به‌روزرسانی شد');
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
 // ============ Boot ============
 if (State.token) {
   enterApp();
 }
+
+// Health check / Redis status (polling every 10s)
+async function checkConnection() {
+  const el = $('#connStatus');
+  if (!el) return;
+  if (!el.querySelector('.dot')) {
+    el.innerHTML = '<span class="dot"></span><span>...</span>';
+  }
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store' });
+    const j = await r.json();
+    if (j && j.success) {
+      el.classList.remove('disconnected');
+      const txt = el.querySelector('span:last-child');
+      if (txt) txt.textContent = 'متصل';
+    } else {
+      throw new Error('invalid');
+    }
+  } catch (e) {
+    el.classList.add('disconnected');
+    const txt = el.querySelector('span:last-child');
+    if (txt) txt.textContent = 'قطع';
+  }
+}
+checkConnection();
+setInterval(checkConnection, 10000);
