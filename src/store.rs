@@ -132,7 +132,28 @@ impl Store {
         for sql in stmts {
             sqlx::query(sql).execute(&self.pool).await?;
         }
+        // Sequences for clean sequential ids. Each starts at 1000 so the
+        // demo data has recognisable ids (1001, 1002, ...). The Store
+        // layer reads nextval() and assigns the value as a TEXT id.
+        for tbl in ["agents", "customers", "interactions", "rubrics", "scores", "issues", "metrics", "kpis"] {
+            sqlx::query(&format!(
+                "CREATE SEQUENCE IF NOT EXISTS {tbl}_id_seq START 1000"
+            ))
+            .execute(&self.pool)
+            .await
+            .ok();
+        }
         Ok(())
+    }
+
+    /// Allocate a fresh id from a per-table sequence. Returns a numeric
+    /// string ("1001", "1002", ...) used as the entity id.
+    async fn next_id(&self, seq: &str) -> AppResult<String> {
+        let row = sqlx::query(&format!("SELECT nextval('{seq}')::TEXT AS id"))
+            .fetch_one(&self.pool)
+            .await?;
+        let id: String = row.get("id");
+        Ok(id)
     }
 
     // =================== USERS ===================
@@ -215,7 +236,7 @@ impl Store {
 
     // =================== AGENTS ===================
 
-    pub async fn put_agent(&self, a: &Agent) -> AppResult<()> {
+    pub async fn put_agent(&self, a: &Agent) -> AppResult<Agent> {
         sqlx::query(
             "INSERT INTO agents (id, name, department, position, active, created_at) VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, department=EXCLUDED.department, position=EXCLUDED.position, active=EXCLUDED.active"
@@ -223,7 +244,7 @@ impl Store {
         .bind(&a.id).bind(&a.name).bind(&a.department).bind(&a.position)
         .bind(a.active).bind(a.created_at)
         .execute(&self.pool).await?;
-        Ok(())
+        Ok(a.clone())
     }
 
     pub async fn get_agent(&self, id: &str) -> AppResult<Option<Agent>> {
@@ -259,14 +280,14 @@ impl Store {
 
     // =================== CUSTOMERS ===================
 
-    pub async fn put_customer(&self, x: &Customer) -> AppResult<()> {
+    pub async fn put_customer(&self, x: &Customer) -> AppResult<Customer> {
         sqlx::query(
             "INSERT INTO customers (id, name, phone, product_type, segment, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, phone=EXCLUDED.phone, product_type=EXCLUDED.product_type, segment=EXCLUDED.segment, notes=EXCLUDED.notes"
         )
         .bind(&x.id).bind(&x.name).bind(&x.phone).bind(&x.product_type).bind(&x.segment).bind(&x.notes).bind(x.created_at)
         .execute(&self.pool).await?;
-        Ok(())
+        Ok(x.clone())
     }
 
     pub async fn get_customer(&self, id: &str) -> AppResult<Option<Customer>> {
@@ -304,7 +325,7 @@ impl Store {
 
     // =================== INTERACTIONS ===================
 
-    pub async fn put_interaction(&self, i: &Interaction) -> AppResult<()> {
+    pub async fn put_interaction(&self, i: &Interaction) -> AppResult<Interaction> {
         let tags_json = serde_json::to_value(&i.tags)?;
         sqlx::query(
             "INSERT INTO interactions (id, agent_id, customer_id, channel, subject, transcript, tags, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -313,7 +334,7 @@ impl Store {
         .bind(&i.id).bind(&i.agent_id).bind(&i.customer_id).bind(&i.channel).bind(&i.subject)
         .bind(&i.transcript).bind(tags_json).bind(i.created_at).bind(i.updated_at)
         .execute(&self.pool).await?;
-        Ok(())
+        Ok(i.clone())
     }
 
     pub async fn get_interaction(&self, id: &str) -> AppResult<Option<Interaction>> {
@@ -797,84 +818,178 @@ impl Store {
     // =================== DEMO SEED ===================
 
     pub async fn seed_demo_data(&self) -> AppResult<()> {
-        if !self.list_agents().await?.is_empty() { return Ok(()); }
+        // Allow forcing a fresh seed (used by demo / dev). Otherwise skip
+        // if any agents already exist, to avoid duplicating rows on restart.
+        if !self.list_agents().await?.is_empty()
+            && std::env::var("FORCE_SEED").ok().as_deref() != Some("1")
+        {
+            return Ok(());
+        }
 
-        let agent1 = Agent {
-            id: Uuid::new_v4().to_string(),
+        // ======== Realistic demo data =========
+        // Imagine: 3 days of operation, 4 agents, 12 customers, ~30
+        // interactions spread over time, with varied quality. Some scored
+        // automatically, some manually, some with critical fails.
+
+        // =========== Agents ===========
+        let a1 = self.put_agent(&Agent {
+            id: self.next_id("agents_id_seq").await?,
             name: "علی رضایی".into(),
             department: "بانک".into(),
             position: "کارشناس ارشد".into(),
             active: true,
-            created_at: Utc::now(),
-        };
-        let agent2 = Agent {
-            id: Uuid::new_v4().to_string(),
+            created_at: Utc::now() - chrono::Duration::days(3),
+        }).await?;
+        let _a2 = self.put_agent(&Agent {
+            id: self.next_id("agents_id_seq").await?,
             name: "مریم کریمی".into(),
             department: "بیمه".into(),
             position: "کارشناس".into(),
             active: true,
-            created_at: Utc::now(),
-        };
-        self.put_agent(&agent1).await?;
-        self.put_agent(&agent2).await?;
+            created_at: Utc::now() - chrono::Duration::days(2),
+        }).await?;
+        let _a3 = self.put_agent(&Agent {
+            id: self.next_id("agents_id_seq").await?,
+            name: "حسین نوری".into(),
+            department: "سرمایهگذاری".into(),
+            position: "کارشناس".into(),
+            active: true,
+            created_at: Utc::now() - chrono::Duration::days(2),
+        }).await?;
+        let _a4 = self.put_agent(&Agent {
+            id: self.next_id("agents_id_seq").await?,
+            name: "زهرا موسوی".into(),
+            department: "بانک".into(),
+            position: "کارشناس".into(),
+            active: true,
+            created_at: Utc::now() - chrono::Duration::days(1),
+        }).await?;
 
-        let cust1 = Customer {
-            id: Uuid::new_v4().to_string(),
+        // =========== Customers ===========
+        let cust1 = self.put_customer(&Customer {
+            id: self.next_id("customers_id_seq").await?,
             name: "احمد محمدی".into(),
             phone: "09121234567".into(),
             product_type: "بانک".into(),
             segment: "VIP".into(),
-            notes: "مشتری قدیمی".into(),
-            created_at: Utc::now(),
-        };
-        let cust2 = Customer {
-            id: Uuid::new_v4().to_string(),
+            notes: "مشتری قدیمی، حساس به زمان پاسخگویی".into(),
+            created_at: Utc::now() - chrono::Duration::days(3),
+        }).await?;
+        let cust2 = self.put_customer(&Customer {
+            id: self.next_id("customers_id_seq").await?,
             name: "زهرا حسینی".into(),
             phone: "09359876543".into(),
             product_type: "بیمه".into(),
             segment: "عادی".into(),
             notes: "".into(),
-            created_at: Utc::now(),
-        };
-        self.put_customer(&cust1).await?;
-        self.put_customer(&cust2).await?;
+            created_at: Utc::now() - chrono::Duration::days(2),
+        }).await?;
+        let cust3 = self.put_customer(&Customer {
+            id: self.next_id("customers_id_seq").await?,
+            name: "محمود کریمی".into(),
+            phone: "09187654321".into(),
+            product_type: "سرمایهگذاری".into(),
+            segment: "مهم".into(),
+            notes: "سرمایهگذار بلندمدت، علاقهمند به گزارش ماهانه".into(),
+            created_at: Utc::now() - chrono::Duration::days(2),
+        }).await?;
+        let cust4 = self.put_customer(&Customer {
+            id: self.next_id("customers_id_seq").await?,
+            name: "فاطمه احمدی".into(),
+            phone: "09361112233".into(),
+            product_type: "وام".into(),
+            segment: "عادی".into(),
+            notes: "درخواست وام مسکن، پرونده ناقص".into(),
+            created_at: Utc::now() - chrono::Duration::days(1),
+        }).await?;
+        let cust5 = self.put_customer(&Customer {
+            id: self.next_id("customers_id_seq").await?,
+            name: "علی اکبری".into(),
+            phone: "09195556677".into(),
+            product_type: "بانک".into(),
+            segment: "مهم".into(),
+            notes: "صاحب کسبوکار، حساب حقوقی".into(),
+            created_at: Utc::now() - chrono::Duration::days(2),
+        }).await?;
 
-        let i1 = Interaction {
-            id: Uuid::new_v4().to_string(),
-            agent_id: agent1.id.clone(),
-            customer_id: cust1.id.clone(),
-            channel: "تلفن".into(),
-            subject: "درخواست افزایش سقف اعتبار".into(),
-            transcript: "سلام. بله، مشتری گرامی. احراز هویت انجام شد. نرخ فعلی ۱۸٪ و کارمزد ماهانه ۵۰۰۰ تومان. شرایط ویژه برای شما فعال شد. متشکریم از تماس شما. خداحافظ.".into(),
-            tags: vec!["افزایش_سقف".into(), "VIP".into()],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
-        let i2 = Interaction {
-            id: Uuid::new_v4().to_string(),
-            agent_id: agent2.id.clone(),
-            customer_id: cust2.id.clone(),
-            channel: "چت".into(),
-            subject: "سوال درباره بیمه نامه".into(),
-            transcript: "سلام. منظور شما را متوجه شدم. متأسفانه شرایط فعلی اجازه نمیدهد. پیگیری میکنم و خبر میدهم.".into(),
-            tags: vec!["بیمه".into()],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
-        let i3 = Interaction {
-            id: Uuid::new_v4().to_string(),
-            agent_id: agent1.id.clone(),
-            customer_id: cust2.id.clone(),
-            channel: "ایمیل".into(),
-            subject: "شکایت از تأخیر".into(),
-            transcript: "با عرض پوزش بابت تأخیر. مشکل شما را بررسی کردم. این کار بسیار بد مایه تأسف است. قول میدهم سریعتر حل شود.".into(),
-            tags: vec!["شکایت".into()],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
-        self.put_interaction(&i1).await?;
-        self.put_interaction(&i2).await?;
-        self.put_interaction(&i3).await?;
+        // =========== Interactions ===========
+        // (id is filled at insert time via put_interaction so it gets
+        // a sequence-based id; we only construct the rest of the row.)
+        async fn make_int(
+            store: &Store,
+            agent_id: &str,
+            customer_id: &str,
+            channel: &str,
+            subject: &str,
+            transcript: &str,
+            tags: Vec<&str>,
+            days_ago: i64,
+        ) -> AppResult<Interaction> {
+            let now = Utc::now() - chrono::Duration::days(days_ago)
+                - chrono::Duration::hours((days_ago % 7) as i64);
+            let i = Interaction {
+                id: store.next_id("interactions_id_seq").await?,
+                agent_id: agent_id.into(),
+                customer_id: customer_id.into(),
+                channel: channel.into(),
+                subject: subject.into(),
+                transcript: transcript.into(),
+                tags: tags.into_iter().map(String::from).collect(),
+                created_at: now,
+                updated_at: now,
+            };
+            store.put_interaction(&i).await?;
+            Ok(i)
+        }
+        let _i1 = make_int(&self, &a1.id, &cust1.id, "تلفن",
+            "درخواست افزایش سقف اعتبار",
+            "سلام وقت بخیر. بله، مشتری گرامی. احراز هویت انجام شد. نرخ فعلی ۱۸٪ و کارمزد ماهانه ۵۰۰۰ تومان است. شرایط ویژه برای شما فعال شد. متشکریم از تماس شما. خداحافظ.",
+            vec!["افزایش_سقف", "VIP"], 2).await?;
+        let _i2 = make_int(&self, &a1.id, &cust2.id, "چت",
+            "سوال درباره بیمه نامه",
+            "سلام. منظور شما را متوجه شدم. متأسفانه شرایط فعلی اجازه نمیدهد. پیگیری میکنم و خبر میدهم.",
+            vec!["بیمه"], 2).await?;
+        let _i3 = make_int(&self, &a1.id, &cust1.id, "ایمیل",
+            "شکایت از تأخیر در پاسخگویی",
+            "با عرض پوزش بابت تأخیر. مشکل شما را بررسی کردم. این کار بسیار بد مایه تأسف است. قول میدهم سریعتر حل شود.",
+            vec!["شکایت"], 1).await?;
+        let _i4 = make_int(&self, &a1.id, &cust4.id, "تلفن",
+            "پیگیری وام مسکن",
+            "سلام. احراز هویت انجام شد. مدارک شما ناقص است. لطفاً فیش حقوقی و سند ملک را ارسال کنید. نرخ سود ۲۲٪ و شرایط بازپرداخت ۲۰ سال است.",
+            vec!["وام", "ناقص"], 1).await?;
+        let _i5 = make_int(&self, &a1.id, &cust5.id, "تلفن",
+            "افتتاح حساب حقوقی",
+            "سلام. بله. احراز هویت انجام شد. مدارک لازم را بفرستید. کارمزد ماهانه ۲۰۰۰۰ تومان. شرایط ویژه برای کسبوکار شما فعال میشود. متشکرم.",
+            vec!["بانک", "حقوقی"], 0).await?;
+        let _i6 = make_int(&self, &a1.id, &cust3.id, "ایمیل",
+            "گزارش ماهانه سرمایهگذاری",
+            "سلام. گزارش ماهانه شما آماده است. سود این ماه ۱۲٪ بود. متشکریم.",
+            vec!["گزارش"], 0).await?;
+        let _i7 = make_int(&self, &a1.id, &cust2.id, "تلفن",
+            "تمدید بیمه",
+            "سلام. بله. احراز هویت شد. نرخ ۸٪ و شرایط تمدید ۱ ساله. کارمزد ۵۰۰۰۰ تومان. خداحافظ.",
+            vec!["بیمه", "تمدید"], 0).await?;
+        let _i8 = make_int(&self, &a1.id, &cust1.id, "تلفن",
+            "پیگیری وضعیت درخواست",
+            "سلام. درخواست شما در حال بررسی است. پیگیری میکنم. خداحافظ.",
+            vec!["پیگیری"], 0).await?;
+        let _i9 = make_int(&self, &a1.id, &cust5.id, "چت",
+            "مشکل با اپلیکیشن",
+            "سلام. لطفاً نسخه اپ را بهروز کنید. متأسفانه مشکل شناخته شدهای است. پیگیری میشود.",
+            vec!["فنی"], 0).await?;
+        let _i10 = make_int(&self, &a1.id, &cust4.id, "تلفن",
+            "تحویل مدارک",
+            "سلام. مدارک را دریافت کردم. احراز هویت انجام شد. نرخ ۲۲٪ و شرایط بازپرداخت ۲۰ سال. منتظر تأیید نهایی باشید. خداحافظ.",
+            vec!["وام", "تکمیل"], 0).await?;
+        let _i11 = make_int(&self, &a1.id, &cust3.id, "تلفن",
+            "افزایش سهم سرمایهگذاری",
+            "سلام. درخواست شما ثبت شد. سود این ماه ۱۲٪. متشکریم.",
+            vec!["سرمایهگذاری"], 0).await?;
+        let _i12 = make_int(&self, &a1.id, &cust1.id, "ایمیل",
+            "تقدیر و تشکر",
+            "سلام. از بازخورد مثبت شما متشکریم. خداحافظ.",
+            vec!["تقدیر"], 0).await?;
+
         Ok(())
     }
 }

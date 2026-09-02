@@ -28,6 +28,16 @@ impl AppState {
     async fn seed_defaults(&self) -> Result<(), error::AppError> {
         self.store.ensure_admin("admin", "ADMIN_PASS_REDACTED").await?;
         self.store.ensure_default_rubric().await?;
+        if std::env::var("FORCE_SEED").ok().as_deref() == Some("1") {
+            // Wipe business data before re-seeding demo. Users and rubrics
+            // are preserved (admin user + default rubric).
+            sqlx::query(
+                "TRUNCATE TABLE scores, issues, interactions, kpis, customers, agents RESTART IDENTITY CASCADE"
+            )
+            .execute(&self.store.pool)
+            .await
+            .ok();
+        }
         self.store.seed_demo_data().await?;
         Ok(())
     }
