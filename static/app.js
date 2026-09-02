@@ -17,6 +17,8 @@ const State = {
   dashboard: null, agentsAvg: {},
   loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, kpis: false, dashboard: false, rec: false },
   trendChart: null,
+  page: { interactions: 1, issues: 1, agents: 1, customers: 1 },
+  pageSize: 20,
 };
 
 function setToken(t, u) {
@@ -179,10 +181,9 @@ async function loadCustomers() {
 }
 async function loadInteractions() {
   if (State.loaded.interactions) { renderInteractions(); return; }
-  const c = cacheGet('interactions'); if (c) { State.interactions = c; State.loaded.interactions = true; renderInteractions(); return; }
+  // Skip localStorage cache to avoid stale data after restarts/seeds
   State.interactions = await api('/interactions');
   State.loaded.interactions = true;
-  cacheSet('interactions', State.interactions);
   loadAllScoresLazy();
   renderInteractions();
 }
@@ -295,6 +296,31 @@ function renderTrendChart() {
   });
 }
 
+// ============ Pagination helper ============
+function renderPagination(selector, total, page, totalPages, onChange) {
+  const el = document.querySelector(selector);
+  if (!el) return;
+  if (total === 0) { el.innerHTML = '<span style="color:var(--text-muted);font-size:12px">بدون رکورد</span>'; return; }
+  const start = (page - 1) * (State.pageSize || 20) + 1;
+  const end = Math.min(page * (State.pageSize || 20), total);
+  const btn = (label, p, dis) =>
+    `<button class="btn btn-sm" data-pg="${p}" ${dis ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>${label}</button>`;
+  el.innerHTML =
+    `<div style="display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap;padding:12px 0">
+       <div style="color:var(--text-muted);font-size:12px">نمایش <b>${start}–${end}</b> از <b>${total}</b> رکورد</div>
+       <div style="display:flex;gap:4px;align-items:center">
+         ${btn('« اول', 1, page === 1)}
+         ${btn('‹ قبلی', page - 1, page === 1)}
+         <span style="padding:4px 10px;background:var(--surface-2);border-radius:6px;font-size:13px">صفحه ${page} از ${totalPages}</span>
+         ${btn('بعدی ›', page + 1, page === totalPages)}
+         ${btn('آخر »', totalPages, page === totalPages)}
+       </div>
+     </div>`;
+  el.querySelectorAll('button[data-pg]').forEach(b => {
+    b.addEventListener('click', () => onChange(parseInt(b.dataset.pg, 10)));
+  });
+}
+
 // ============ Interactions ============
 function renderInteractions() {
   const tbody = $('#interactionsTable tbody');
@@ -303,6 +329,7 @@ function renderInteractions() {
   const channel = $('#fChannel')?.value || '';
   const agentId = $('#fAgent')?.value || '';
   const status = $('#fStatus')?.value || '';
+  const pageSize = State.pageSize || 20;
 
   const sel = $('#fAgent');
   if (sel && sel.options.length <= 1 && State.agents.length) {
@@ -318,7 +345,15 @@ function renderInteractions() {
   if (status === 'unscored') rows = rows.filter(i => !State.scores[i.id]);
   rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-  tbody.innerHTML = rows.map(i => {
+  // Pagination
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (!State.page.interactions || State.page.interactions > totalPages) State.page.interactions = 1;
+  const page = State.page.interactions;
+  const start = (page - 1) * pageSize;
+  const pageRows = rows.slice(start, start + pageSize);
+
+  tbody.innerHTML = pageRows.map(i => {
     const s = State.scores[i.id];
     const agent = State.agents.find(a => a.id === i.agent_id);
     const customer = State.customers.find(c => c.id === i.customer_id);
@@ -338,6 +373,39 @@ function renderInteractions() {
 
   tbody.querySelectorAll('[data-auto]').forEach(b => b.addEventListener('click', () => openAutoScore(b.dataset.auto)));
   tbody.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => openView(b.dataset.view)));
+
+  // Render pagination footer
+  renderPagination('#interactionsPager', total, page, totalPages, (newPage) => {
+    State.page.interactions = newPage;
+    renderInteractions();
+  });
+}
+
+function renderPagination(container, total, page, totalPages, onChange) {
+  const el = document.querySelector(container);
+  if (!el) return;
+  if (total === 0) { el.innerHTML = ''; return; }
+  const pageSize = Math.max(1, Math.ceil(total / totalPages));
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(total, start + pageSize - 1);
+  const btn = (label, p, dis) =>
+    `<button class="btn btn-sm" data-pg="${p}" ${dis ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>${label}</button>`;
+  el.innerHTML =
+    `<div class="pager-bar">
+       <span class="pager-info">نمایش <b>${start}–${end}</b> از <b>${total}</b> رکورد (صفحه ${page} از ${totalPages})</span>
+       <div class="pager-buttons">
+         ${btn('« اول', 1, page === 1)}
+         ${btn('‹ قبلی', page - 1, page === 1)}
+         ${btn('بعدی ›', page + 1, page === totalPages)}
+         ${btn('آخر »', totalPages, page === totalPages)}
+       </div>
+     </div>`;
+  el.querySelectorAll('button[data-pg]').forEach(b => {
+    b.addEventListener('click', () => {
+      const p = parseInt(b.dataset.pg, 10);
+      if (p >= 1 && p <= totalPages) onChange(p);
+    });
+  });
 }
 
 $('#fSearch')?.addEventListener('input', renderInteractions);
