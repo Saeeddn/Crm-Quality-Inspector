@@ -34,7 +34,7 @@ pub fn router() -> Router<AppState> {
         .route("/scoring/score", post(submit_score))
         .route("/scoring/auto/:interaction_id", post(auto_score_interaction))
         .route("/scoring/:id", get(get_score_by_interaction))
-        .route("/issues", get(list_issues))
+        .route("/issues", get(list_issues).post(create_issue_handler))
         .route("/issues/:id/resolve", patch(resolve_issue))
         .route("/recommendations", get(list_recommendations))
         .route("/kpis", get(list_kpis).post(create_kpi))
@@ -353,6 +353,24 @@ pub async fn list_issues(
     if let Some(st) = &q.status { v.retain(|x| &x.status == st); }
     if let Some(aid) = &q.agent_id { v.retain(|x| &x.agent_id == aid); }
     Ok(ok(v))
+}
+
+pub async fn create_issue_handler(
+    State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>,
+    Json(req): Json<CreateIssueRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    let issue = s.create_issue(
+        req.interaction_id,
+        req.agent_id,
+        req.severity,
+        req.category,
+        req.description,
+        if req.status.is_empty() { "باز".into() } else { req.status },
+    ).await?;
+    let _ = me.username;
+    Ok(ok(issue))
 }
 
 pub async fn resolve_issue(

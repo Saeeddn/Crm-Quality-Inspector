@@ -39,6 +39,7 @@ impl AppState {
             .ok();
         }
         self.store.seed_demo_data().await?;
+        self.store.seed_scores_and_issues().await?;
         Ok(())
     }
 }

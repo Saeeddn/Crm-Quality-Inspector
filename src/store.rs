@@ -464,7 +464,7 @@ impl Store {
 
     // =================== SCORES ===================
 
-    pub async fn put_score(&self, s: &Score) -> AppResult<()> {
+    pub async fn put_score(&self, s: &Score) -> AppResult<Score> {
         let dim_json = serde_json::to_value(&s.dimension_scores)?;
         let reasons_json = serde_json::to_value(&s.critical_fail_reasons)?;
         sqlx::query(
@@ -474,7 +474,7 @@ impl Store {
         .bind(&s.id).bind(&s.interaction_id).bind(&s.rubric_id).bind(s.overall_score).bind(&s.level)
         .bind(dim_json).bind(s.critical_fail).bind(reasons_json).bind(&s.evaluator).bind(&s.notes).bind(s.created_at)
         .execute(&self.pool).await?;
-        Ok(())
+        Ok(s.clone())
     }
 
     pub async fn get_score_by_interaction(&self, interaction_id: &str) -> AppResult<Option<Score>> {
@@ -816,6 +816,121 @@ impl Store {
     }
 
     // =================== DEMO SEED ===================
+
+    /// Direct SQL seed of pre-computed scores and issues for the demo
+    /// dataset. Called by lib.rs after seed_demo_data() so the dashboard
+    /// has data to chart. We bypass the KPI engine here because the demo
+    /// values are hand-picked to make the dashboard look realistic.
+    pub async fn seed_scores_and_issues(&self) -> AppResult<()> {
+        if self.scan_scores().await?.len() >= 8 { return Ok(()); }
+
+        // Pre-computed score profile for the 8 interactions.
+        // (interaction_id, overall, level, critical, reasons)
+        let scores: Vec<(&str, f64, &str, bool, Vec<&str>)> = vec![
+            ("1012", 64.7, "نیازمند بهبود", false, vec![]),     // افزایش سقف
+            ("1014", 6.98, "ضعیف", true, vec!["شکایت مشتری"]), // شکایت تأخیر
+            ("1015", 52.3, "ضعیف", false, vec![]),            // وام
+            ("1016", 57.2, "ضعیف", false, vec![]),            // افتتاح حساب
+            ("1017", 49.4, "ضعیف", false, vec![]),            // گزارش
+            ("1018", 61.9, "نیازمند بهبود", false, vec![]),   // تمدید بیمه
+            ("1021", 62.9, "نیازمند بهبود", false, vec![]),   // تحویل مدارک
+            ("1022", 49.0, "ضعیف", false, vec![]),            // افزایش سهم
+        ];
+
+        // Map interaction_id -> agent_id (needed for issues)
+        let interactions = self.list_interactions().await?;
+        let agent_of = |iid: &str| -> String {
+            interactions.iter().find(|x| x.id == iid).map(|x| x.agent_id.clone()).unwrap_or_default()
+        };
+
+        let now = Utc::now();
+        for (i_id, overall, level, critical, reasons) in &scores {
+            let dim_count = 7;
+            let dim_scores: Vec<f64> = (0..dim_count).map(|i| {
+                let frac = (overall / 100.0).clamp(0.0, 1.0);
+                let base = frac * 100.0;
+                let variation = (i as f64 * 7.3).sin().abs() * 20.0 - 10.0;
+                (base + variation).clamp(0.0, 100.0)
+            }).collect();
+            let s = Score {
+                id: self.next_id("scores_id_seq").await?,
+                interaction_id: i_id.to_string(),
+                rubric_id: String::new(),
+                overall_score: *overall,
+                level: level.to_string(),
+                dimension_scores: dim_scores,
+                critical_fail: *critical,
+                critical_fail_reasons: reasons.iter().map(|s| s.to_string()).collect(),
+                evaluator: "demo_seed".into(),
+                notes: "امتیاز ثبت شده توسط داده دمو".into(),
+                created_at: now - chrono::Duration::hours(2),
+            };
+            self.put_score(&s).await?;
+
+            // Auto-issue
+            let (sev, cat, desc) = if *critical {
+                ("بحرانی", "انطباق/دقت",
+                 format!("شکست بحرانی: {}", reasons.join("، ")))
+            } else if *overall < 60.0 {
+                ("بالا", "کیفیت کلی",
+                 format!("امتیاز کیفیت {} کمتر از حد هشدار ۶۰", overall))
+            } else {
+                ("متوسط", "بهبود",
+                 format!("تعامل نیازمند برنامه بهبود؛ امتیاز {}", overall))
+            };
+            let due_days = if sev == "بحرانی" { 1 } else { 3 };
+            let issue = Issue {
+                id: self.next_id("issues_id_seq").await?,
+                interaction_id: i_id.to_string(),
+                agent_id: agent_of(i_id),
+                severity: sev.to_string(),
+                category: cat.to_string(),
+                description: desc,
+                status: "باز".into(),
+                root_cause: None,
+                corrective_action: None,
+                due_at: Some(Utc::now() + chrono::Duration::days(due_days)),
+                created_at: now - chrono::Duration::hours(1),
+                resolved_at: None,
+            };
+            self.put_issue(&issue).await?;
+        }
+
+        // Add a couple of resolved issues for the demo (history)
+        let resolved = vec![
+            Issue {
+                id: self.next_id("issues_id_seq").await?,
+                interaction_id: "1013".into(), // بیمه
+                agent_id: agent_of("1013"),
+                severity: "متوسط".into(),
+                category: "اطلاعرسانی".into(),
+                description: "اطلاعات کافی درباره شرایط بیمه ارائه نشد".into(),
+                status: "بسته".into(),
+                root_cause: Some("آموزش ناقص کارشناس".into()),
+                corrective_action: Some("برگزاری دوره آموزشی بیمه".into()),
+                due_at: Some(now - chrono::Duration::days(1)),
+                created_at: now - chrono::Duration::days(2),
+                resolved_at: Some(now - chrono::Duration::days(1)),
+            },
+            Issue {
+                id: self.next_id("issues_id_seq").await?,
+                interaction_id: "1017".into(), // گزارش
+                agent_id: agent_of("1017"),
+                severity: "پایین".into(),
+                category: "مستندسازی".into(),
+                description: "گزارش ماهانه فاقد جزئیات کافی بود".into(),
+                status: "در حال بررسی".into(),
+                root_cause: None,
+                corrective_action: None,
+                due_at: Some(now + chrono::Duration::days(2)),
+                created_at: now - chrono::Duration::hours(12),
+                resolved_at: None,
+            },
+        ];
+        for i in &resolved { self.put_issue(i).await?; }
+
+        Ok(())
+    }
 
     pub async fn seed_demo_data(&self) -> AppResult<()> {
         // Allow forcing a fresh seed (used by demo / dev). Otherwise skip

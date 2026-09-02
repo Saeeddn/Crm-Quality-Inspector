@@ -363,6 +363,17 @@ pub struct ResolveIssueRequest {
     pub corrective_action: String,
 }
 
+#[derive(Deserialize)]
+pub struct CreateIssueRequest {
+    pub interaction_id: String,
+    pub agent_id: String,
+    pub severity: String,   // بحرانی / بالا / متوسط / پایین
+    pub category: String,
+    pub description: String,
+    #[serde(default)]
+    pub status: String,     // باز / در حال بررسی / بسته
+}
+
 // =====================
 // MetricDefinition (پارامتر اندازه‌گیری)
 // =====================

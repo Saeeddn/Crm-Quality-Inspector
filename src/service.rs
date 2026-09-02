@@ -315,6 +315,9 @@ impl<'a> Service<'a> {
             created_at: now,
         };
         self.store.put_score(&score).await?;
+        // Auto-create follow-up issues when score is poor
+        let rubric = Rubric { id: String::new(), name: String::new(), department: String::new(), product_type: None, channel: None, version: 1, criteria: vec![], active: true, created_at: now };
+        self.auto_create_issues(&interaction, &score, &rubric).await?;
         Ok(score)
     }
 
@@ -992,6 +995,42 @@ impl<'a> Service<'a> {
     }
 
     // =================== Issues ===================
+
+    pub async fn create_issue(
+        &self,
+        interaction_id: String,
+        agent_id: String,
+        severity: String,
+        category: String,
+        description: String,
+        status: String,
+    ) -> AppResult<Issue> {
+        if !["بحرانی", "بالا", "متوسط", "پایین"].contains(&severity.as_str()) {
+            return Err(AppError::Validation("سطح ایراد نامعتبر است".into()));
+        }
+        let due_days = match severity.as_str() {
+            "بحرانی" => 1,
+            "بالا" => 3,
+            "متوسط" => 7,
+            _ => 14,
+        };
+        let issue = Issue {
+            id: Uuid::new_v4().to_string(),
+            interaction_id,
+            agent_id,
+            severity,
+            category,
+            description,
+            status,
+            root_cause: None,
+            corrective_action: None,
+            due_at: Some(Utc::now() + Duration::days(due_days)),
+            created_at: Utc::now(),
+            resolved_at: None,
+        };
+        self.store.put_issue(&issue).await?;
+        Ok(issue)
+    }
 
     pub async fn resolve_issue(&self, id: &str, req: ResolveIssueRequest) -> AppResult<Issue> {
         let mut issue = self
