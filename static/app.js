@@ -63,8 +63,29 @@ async function api(url, opts = {}) {
   return j.data;
 }
 
-function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+// Loading overlay helpers
+let _loadingCount = 0;
+function showLoading(text) {
+  _loadingCount++;
+  const ov = $('#loadingOverlay');
+  if (!ov) return;
+  if (text) $('#loadingText').textContent = text;
+  else $('#loadingText').textContent = 'در حال بارگذاری...';
+  ov.hidden = false;
+}
+function hideLoading() {
+  _loadingCount = Math.max(0, _loadingCount - 1);
+  if (_loadingCount === 0) {
+    const ov = $('#loadingOverlay');
+    if (ov) ov.hidden = true;
+  }
+}
+async function withLoading(text, fn) {
+  showLoading(text);
+  try { return await fn(); }
+  finally { hideLoading(); }
 }
 function fmtDate(iso) {
   if (!iso) return '-';
@@ -102,7 +123,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
   const err = $('#loginError');
   err.classList.remove('show');
   try {
-    const data = await api('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+    const data = await withLoading('در حال ورود...', () => api('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }));
     setToken(data.token, { username: data.username, is_admin: data.is_admin });
     enterApp();
   } catch (ex) {
@@ -134,7 +155,7 @@ async function loadDashboard() {
   if (State.loaded.dashboard) { renderDashboard(); return; }
   const c = cacheGet('dashboard'); if (c) { State.dashboard = c; State.loaded.dashboard = true; renderDashboard(); return; }
   try {
-    State.dashboard = await api('/reports/dashboard');
+    State.dashboard = await withLoading('در حال محاسبه KPI و نمودارها...', () => api('/reports/dashboard'));
     State.loaded.dashboard = true;
     cacheSet('dashboard', State.dashboard);
     renderDashboard();
@@ -184,7 +205,7 @@ async function loadKpis() {
 }
 async function loadRecommendations() {
   if (State.loaded.rec) { renderRecommendations(); return; }
-  State.recommendations = await api('/recommendations'); State.loaded.rec = true;
+  State.recommendations = await withLoading('در حال تحلیل ریسک و اولویت‌بندی...', () => api('/recommendations')); State.loaded.rec = true;
   renderRecommendations();
 }
 
@@ -579,15 +600,60 @@ function renderCustomers() {
       <td><span class="pill pill-info">${esc(c.product_type)}</span></td>
       <td>${esc(c.segment)}</td>
       <td class="row-actions">
+        <button class="btn btn-sm" data-edit-customer="${c.id}">ویرایش</button>
         <button class="btn btn-sm" data-del-customer="${c.id}">حذف</button>
       </td>
     </tr>
   `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">مشتری یافت نشد</td></tr>`;
+  tbody.querySelectorAll('[data-edit-customer]').forEach(b => b.addEventListener('click', () => openEditCustomer(b.dataset.editCustomer)));
   tbody.querySelectorAll('[data-del-customer]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('حذف شود؟')) return;
     try { await api('/customers/' + b.dataset.delCustomer, { method: 'DELETE' }); State.loaded.customers = false; await loadCustomers(); toast('حذف شد'); }
     catch (e) { toast(e.message, 'error'); }
   }));
+}
+
+function openEditCustomer(id) {
+  const c = State.customers.find(x => x.id === id);
+  if (!c) return;
+  openModal(`ویرایش مشتری: ${c.name}`, `
+    <div class="field"><label>نام</label><input id="cName" value="${esc(c.name)}"></div>
+    <div class="field"><label>تلفن</label><input id="cPhone" value="${esc(c.phone)}"></div>
+    <div class="field"><label>نوع محصول</label>
+      <select id="cProduct">
+        <option ${c.product_type==='بانک'?'selected':''}>بانک</option>
+        <option ${c.product_type==='بیمه'?'selected':''}>بیمه</option>
+        <option ${c.product_type==='سرمایه‌گذاری'?'selected':''}>سرمایه‌گذاری</option>
+        <option ${c.product_type==='وام'?'selected':''}>وام</option>
+      </select>
+    </div>
+    <div class="field"><label>سطح</label>
+      <select id="cSegment">
+        <option ${c.segment==='عادی'?'selected':''}>عادی</option>
+        <option ${c.segment==='مهم'?'selected':''}>مهم</option>
+        <option ${c.segment==='VIP'?'selected':''}>VIP</option>
+      </select>
+    </div>
+    <div class="field"><label>یادداشت</label><textarea id="cNotes" rows="2">${esc(c.notes || '')}</textarea></div>
+  `, `<button class="btn btn-primary" id="saveEditCust">ذخیره</button>
+      <button class="btn" data-action="close-modal">انصراف</button>`);
+  $('#saveEditCust').addEventListener('click', async () => {
+    try {
+      await api('/customers/' + encodeURIComponent(id), {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: $('#cName').value.trim(),
+          phone: $('#cPhone').value.trim(),
+          product_type: $('#cProduct').value,
+          segment: $('#cSegment').value,
+          notes: $('#cNotes').value.trim()
+        })
+      });
+      State.loaded.customers = false;
+      closeModal(); await loadCustomers();
+      toast('مشتری به‌روزرسانی شد');
+    } catch (e) { toast(e.message, 'error'); }
+  });
 }
 
 function openNewCustomer() {
@@ -974,8 +1040,11 @@ async function checkConnection() {
   if (!el.querySelector('.dot')) {
     el.innerHTML = '<span class="dot"></span><span>...</span>';
   }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
   try {
-    const r = await fetch('/api/health', { cache: 'no-store' });
+    const r = await fetch('/api/health?ts=' + Date.now(), { cache: 'no-store', signal: controller.signal });
+    clearTimeout(timer);
     const j = await r.json();
     if (j && j.success) {
       el.classList.remove('disconnected');
@@ -985,8 +1054,8 @@ async function checkConnection() {
       throw new Error('invalid');
     }
   } catch (e) {
-    el.classList.add('disconnected');
     const txt = el.querySelector('span:last-child');
+    el.classList.add('disconnected');
     if (txt) txt.textContent = 'قطع';
   }
 }
