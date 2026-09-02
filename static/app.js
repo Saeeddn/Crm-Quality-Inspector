@@ -478,12 +478,13 @@ function renderRecommendations() {
   }
   list.innerHTML = State.recommendations.map(r => {
     const color = r.risk_score >= 70 ? 'var(--danger)' : r.risk_score >= 40 ? 'var(--warning)' : 'var(--info)';
+    const reasons = r.reasons || r.factors || [];
     return `<div class="rec-card">
       <div class="rec-header">
         <div>
           <div class="rec-subject">${esc(r.subject)}</div>
           <div style="color:var(--text-muted);font-size:12px;margin-top:2px">
-            کارشناس: ${esc(r.agent_name)} | مشتری: ${esc(r.customer_name)} | کانال: ${esc(r.channel)}
+            کارشناس: ${esc(r.agent_name || '-')} | مشتری: ${esc(r.customer_name || '-')} | کانال: ${esc(r.channel)}
           </div>
         </div>
         <div style="text-align:center">
@@ -495,7 +496,12 @@ function renderRecommendations() {
       <div class="rec-body">
         <div style="margin-bottom:8px"><b>دلایل ریسک:</b></div>
         <ul class="factors">
-          ${r.factors.map(f => `<li><span class="factor-pill">${esc(f.label)}</span> <span style="color:var(--text-muted);font-size:12px">${esc(f.reason)}</span></li>`).join('')}
+          ${reasons.map(f => {
+            if (typeof f === 'string') {
+              return `<li><span class="factor-pill">${esc(f.split(':')[0] || 'عامل')}</span> <span style="color:var(--text-muted);font-size:12px">${esc(f.includes(':') ? f.split(':').slice(1).join(':') : f)}</span></li>`;
+            }
+            return `<li><span class="factor-pill">${esc(f.label || f.code || '')}</span> <span style="color:var(--text-muted);font-size:12px">${esc(f.reason || '')}</span></li>`;
+          }).join('')}
         </ul>
         <div style="margin-top:8px;padding:8px;background:var(--surface-2);border-radius:6px">
           <b>اقدام پیشنهادی:</b> ${esc(r.suggested_action)}
