@@ -170,6 +170,8 @@ async function loadDashboard() {
     State.loaded.dashboard = true;
     cacheSet('dashboard', State.dashboard);
     renderDashboard();
+    // Also re-render interactions table now that scores are loaded
+    if (document.getElementById('interactionsTable')) renderInteractions();
   } catch (e) {
     if (e.message.includes('invalid or expired') || e.message.includes('missing bearer')) logout();
     else toast(e.message, 'error');
