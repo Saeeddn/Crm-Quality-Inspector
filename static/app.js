@@ -194,8 +194,8 @@ async function loadCustomers() {
   State.customers = await api('/customers'); State.loaded.customers = true; cacheSet('customers', State.customers);
   renderCustomers();
 }
-async function loadInteractions() {
-  if (State.loaded.interactions && State.interactions.length) { renderInteractions(); return; }
+async function loadInteractions(force = false) {
+  if (!force && State.loaded.interactions && State.interactions.length) { renderInteractions(); return; }
   const pageSize = State.pageSize || 10;
   const page = State.page.interactions || 1;
   const data = await api(`/interactions?page=${page}&limit=${pageSize}`);
@@ -388,14 +388,32 @@ function renderPagination(selector, total, page, totalPages, onChange) {
   const end = Math.min(page * pageSize, total);
   const btn = (label, p, dis) =>
     `<button class="btn btn-sm" data-pg="${p}" ${dis ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>${label}</button>`;
+  const sizeOptions = [10, 20, 50, 100];
+  const sizeSelect = sizeOptions.includes(pageSize)
+    ? `<select class="pager-size-select" style="padding:4px 8px;border-radius:6px;background:var(--surface-2);color:var(--foreground);border:1px solid var(--border)">
+         ${sizeOptions.map(n => `<option value="${n}" ${n === pageSize ? 'selected' : ''}>${n}</option>`).join('')}
+         <option value="custom" ${!sizeOptions.includes(pageSize) ? 'selected' : ''}>سفارشی...</option>
+       </select>`
+    : `<select class="pager-size-select" style="padding:4px 8px;border-radius:6px;background:var(--surface-2);color:var(--foreground);border:1px solid var(--border)">
+         ${sizeOptions.map(n => `<option value="${n}">${n}</option>`).join('')}
+         <option value="custom" selected>سفارشی...</option>
+       </select>`;
+  const customInput = !sizeOptions.includes(pageSize)
+    ? `<input type="number" class="pager-size-custom" min="1" max="1000" value="${pageSize}" style="width:70px;padding:4px 8px;border-radius:6px;background:var(--surface-2);color:var(--foreground);border:1px solid var(--border);margin-right:4px" placeholder="تعداد" />`
+    : '';
   el.innerHTML =
-    `<div class="pager-bar">
+    `<div class="pager-bar" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
        <span class="pager-info">نمایش <b>${start}–${end}</b> از <b>${total}</b> رکورد (صفحه ${page} از ${totalPages})</span>
-       <div class="pager-buttons">
+       <div class="pager-buttons" style="display:flex;gap:4px">
          ${btn('« اول', 1, page === 1)}
          ${btn('‹ قبلی', page - 1, page === 1)}
          ${btn('بعدی ›', page + 1, page === totalPages)}
          ${btn('آخر »', totalPages, page === totalPages)}
+       </div>
+       <div class="pager-size" style="display:flex;align-items:center;gap:4px;margin-right:auto">
+         <span style="font-size:12px;color:var(--text-muted)">تعداد در صفحه:</span>
+         ${sizeSelect}
+         ${customInput}
        </div>
      </div>`;
   el.querySelectorAll('button[data-pg]').forEach(b => {
@@ -404,6 +422,28 @@ function renderPagination(selector, total, page, totalPages, onChange) {
       if (p >= 1 && p <= totalPages) onChange(p);
     });
   });
+  const sel = el.querySelector('.pager-size-select');
+  if (sel) {
+    sel.addEventListener('change', (e) => {
+      const v = e.target.value;
+      if (v === 'custom') {
+        // Show prompt for custom value
+        const n = parseInt(prompt('تعداد در صفحه را وارد کنید (۱ تا ۱۰۰۰):', pageSize), 10);
+        if (n >= 1 && n <= 1000) {
+          State.pageSize = n;
+          State.page.interactions = 1;
+          onChange(1);
+        } else {
+          // Revert select
+          e.target.value = sizeOptions.includes(pageSize) ? pageSize : 'custom';
+        }
+      } else {
+        State.pageSize = parseInt(v, 10);
+        State.page.interactions = 1;
+        onChange(1);
+      }
+    });
+  }
 }
 
 // ============ Interactions ============
@@ -462,7 +502,7 @@ function renderInteractions() {
   // Render pagination footer
   renderPagination('#interactionsPager', total, page, totalPages, (newPage) => {
     State.page.interactions = newPage;
-    renderInteractions();
+    loadInteractions(true);
   });
 }
 
