@@ -160,6 +160,8 @@ async function loadDashboard() {
   try {
     State.interactions = await api('/interactions');
     State.loaded.interactions = true;
+    State.agents = await api('/agents');
+    State.loaded.agents = true;
     const scorePromises = State.interactions.map(it =>
       api('/scoring/' + it.id).then(s => { if (s) State.scores[it.id] = s; }).catch(() => null)
     );
@@ -296,6 +298,7 @@ function renderTrendChart() {
     }] },
     options: {
       responsive: true, maintainAspectRatio: false,
+      animation: { duration: 0 },
       plugins: { legend: { labels: { color: '#e6e8ee' } } },
       scales: {
         x: { ticks: { color: '#8a92a6' }, grid: { color: '#2a2f3d' } },
