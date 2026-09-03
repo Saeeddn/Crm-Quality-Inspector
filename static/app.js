@@ -506,33 +506,6 @@ function renderInteractions() {
   });
 }
 
-function renderPagination(container, total, page, totalPages, onChange) {
-  const el = document.querySelector(container);
-  if (!el) return;
-  if (total === 0) { el.innerHTML = ''; return; }
-  const pageSize = Math.max(1, Math.ceil(total / totalPages));
-  const start = (page - 1) * pageSize + 1;
-  const end = Math.min(total, start + pageSize - 1);
-  const btn = (label, p, dis) =>
-    `<button class="btn btn-sm" data-pg="${p}" ${dis ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>${label}</button>`;
-  el.innerHTML =
-    `<div class="pager-bar">
-       <span class="pager-info">نمایش <b>${start}–${end}</b> از <b>${total}</b> رکورد (صفحه ${page} از ${totalPages})</span>
-       <div class="pager-buttons">
-         ${btn('« اول', 1, page === 1)}
-         ${btn('‹ قبلی', page - 1, page === 1)}
-         ${btn('بعدی ›', page + 1, page === totalPages)}
-         ${btn('آخر »', totalPages, page === totalPages)}
-       </div>
-     </div>`;
-  el.querySelectorAll('button[data-pg]').forEach(b => {
-    b.addEventListener('click', () => {
-      const p = parseInt(b.dataset.pg, 10);
-      if (p >= 1 && p <= totalPages) onChange(p);
-    });
-  });
-}
-
 $('#fSearch')?.addEventListener('input', renderInteractions);
 $('#fChannel')?.addEventListener('change', renderInteractions);
 $('#fAgent')?.addEventListener('change', renderInteractions);

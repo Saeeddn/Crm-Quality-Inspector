@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Auto Test</title>
+</head>
+<body>
+<div id="result"></div>
+<script src="/static/jquery.js"></script>
+<script src="/static/chart.js"></script>
+<script src="/static/app.js?v=11"></script>
+<div id="interactionsPager"></div>
+<script>
+fetch('/api/reports/dashboard', {
+  headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('crm_qi_token') || '') }
+}).then(r => r.json()).then(d => {
+  document.getElementById('result').innerText = JSON.stringify(d);
+});
+</script>
+</body>
+</html>
