@@ -59,9 +59,12 @@ pub async fn serve_static(
             let ct = match safe.rsplit('.').next() {
                 Some("css") => "text/css",
                 Some("js") => "application/javascript",
+                Some("html") => "text/html; charset=utf-8",
+                Some("htm") => "text/html; charset=utf-8",
                 Some("png") => "image/png",
                 Some("svg") => "image/svg+xml",
-                _ => "application/octet-stream",
+                Some("json") => "application/json",
+                _ => "text/plain",
             };
             (StatusCode::OK, [(header::CONTENT_TYPE, ct)], bytes).into_response()
         }
