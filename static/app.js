@@ -159,6 +159,12 @@ async function loadDashboard() {
   if (State.loaded.dashboard) { renderDashboard(); return; }
   const c = cacheGet('dashboard'); if (c) { State.dashboard = c; State.loaded.dashboard = true; renderDashboard(); return; }
   try {
+    State.interactions = await api('/interactions');
+    State.loaded.interactions = true;
+    const scorePromises = State.interactions.map(it =>
+      api('/scoring/' + it.id).then(s => { if (s) State.scores[it.id] = s; }).catch(() => null)
+    );
+    await Promise.all(scorePromises);
     State.dashboard = await withLoading('در حال محاسبه KPI و نمودارها...', () => api('/reports/dashboard'));
     State.loaded.dashboard = true;
     cacheSet('dashboard', State.dashboard);
