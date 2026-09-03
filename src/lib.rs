@@ -7,6 +7,7 @@ pub mod store;
 pub mod auth;
 pub mod service;
 pub mod api;
+pub mod openapi;
 
 use std::sync::Arc;
 use axum::Router;
@@ -29,7 +30,14 @@ impl AppState {
     }
 
     async fn seed_defaults(&self) -> Result<(), error::AppError> {
-        self.store.ensure_admin("admin", "ADMIN_PASS_REDACTED").await?;
+        // Admin credentials from env vars (with safe defaults for first-run dev).
+        // In production, set ADMIN_USERNAME and ADMIN_PASSWORD — never commit them.
+        let admin_user = std::env::var("ADMIN_USERNAME").unwrap_or_else(|_| "admin".to_string());
+        let admin_pass = std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| {
+            eprintln!("⚠️  ADMIN_PASSWORD not set; using insecure default 'ADMIN_PASS_REDACTED' (DO NOT use in production)");
+            "ADMIN_PASS_REDACTED".to_string()
+        });
+        self.store.ensure_admin(&admin_user, &admin_pass).await?;
         self.store.ensure_default_rubric().await?;
         if std::env::var("FORCE_SEED").ok().as_deref() == Some("1") {
             // Wipe business data before re-seeding demo. Users and rubrics
@@ -52,6 +60,10 @@ pub fn build_app(state: AppState) -> Router {
         .route("/", axum::routing::get(api::serve_index))
         .route("/index.html", axum::routing::get(api::serve_index))
         .route("/static/*path", axum::routing::get(api::serve_static))
+        // OpenAPI / Swagger UI
+        .route("/openapi.json", axum::routing::get(openapi::openapi_json))
+        .route("/swagger-ui", axum::routing::get(openapi::swagger_ui))
+        .route("/docs", axum::routing::get(openapi::swagger_ui)) // alias
         .nest("/api", api::router())
         .layer(axum::middleware::from_fn_with_state(state.clone(), crate::auth::auth_middleware_inner))
         .layer(CorsLayer::permissive())

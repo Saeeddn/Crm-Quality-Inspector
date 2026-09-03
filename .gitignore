@@ -3,3 +3,40 @@
 *.pdb
 .DS_Store
 .env
+
+# Local dev/debug files (NEVER commit these — contain hardcoded creds)
+static/app-debug.html
+static/full-test.html
+static/dom-test.html
+static/app-test.html
+static/chart-test.html
+static/pager-test.html
+static/debug.html
+static/auto-test.html
+static/pager-test.js
+static/test-*.js
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+
+# Local node / testing
+node_modules/
+package-lock.json
+
+# Secrets — never commit
+*.pem
+*.key
+*.crt
+secrets.yaml

@@ -21,6 +21,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "1"
 async-trait = "0.1"
+utoipa = { version = "5", features = ["axum_extras", "chrono"] }
+utoipa-swagger-ui = { version = "8", features = ["axum"] }
 
 [lib]
 name = "crm_qi"

@@ -166,31 +166,29 @@ async function enterApp() {
 async function loadDashboard() {
   if (State.loaded.dashboard) { renderDashboard(); return; }
   try {
-    const iData = await api('/interactions?page=1&limit=1000');
-    State.interactions = iData.items || [];
-    State.interactionsTotal = iData.total;
-    // When loading all (limit=1000), compute total_pages based on default pageSize
-    State.interactionsTotalPages = Math.max(1, Math.ceil((iData.total || State.interactions.length) / (State.pageSize || 10)));
-    State.loaded.interactions = true;
-    // Load all agents (small dataset) for chart lookups
-    const aData = await api('/agents?page=1&limit=1000');
-    State.agents = aData.items || [];
-    State.agentsTotal = aData.total;
-    State.agentsTotalPages = aData.total_pages || 1;
-    State.loaded.agents = true;
-    const scorePromises = State.interactions.map(it =>
-      api('/scoring/' + it.id).then(s => { if (s) State.scores[it.id] = s; }).catch(() => null)
-    );
-    await Promise.all(scorePromises);
+    // Performance optimization: load ONLY the dashboard summary + per-interaction scores.
+    // Don't load full interactions/agents tables here — those are loaded on demand
+    // when the user clicks the corresponding tab. This keeps the dashboard render fast
+    // even with thousands of interactions.
     State.dashboard = await withLoading('در حال محاسبه KPI و نمودارها...', () => api('/reports/dashboard'));
     State.loaded.dashboard = true;
     cacheSet('dashboard', State.dashboard);
+    // Render dashboard immediately (charts work with the counts only)
     renderDashboard();
-    // Also re-render interactions table now that scores are loaded
-    if (document.getElementById('interactionsTable')) renderInteractions();
+    // Defer table loading so the dashboard paints fast. If the user has
+    // already navigated to a non-default page, respect that.
+    setTimeout(async () => {
+      if (!State.loaded.interactions && State.page.interactions <= 1) {
+        await loadInteractions();
+        loadAllScoresLazy();
+      } else if (!State.loaded.interactions) {
+        await loadInteractions();
+        loadAllScoresLazy();
+      }
+      if (!State.loaded.agents) await loadAgents();
+    }, 100);
   } catch (e) {
-    if (e.message.includes('invalid or expired') || e.message.includes('missing bearer')) logout();
-    else toast(e.message, 'error');
+    toast('خطا در بارگذاری داشبورد: ' + e.message, 'error');
   }
 }
 
@@ -238,6 +236,11 @@ async function loadAllScoresLazy() {
   );
   await Promise.all(promises);
   renderInteractions();
+  // Refresh charts now that scores are loaded
+  if (document.getElementById('trendChart')) renderTrendChart();
+  if (State.loaded.agents && document.getElementById('agentChart') && State.agentChart === null) {
+    renderAgentChart();
+  }
 }
 async function loadIssues(force = false) {
   const pageSize = State.pageSize || 10;

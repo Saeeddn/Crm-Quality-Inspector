@@ -85,28 +85,39 @@ A modern, high-performance call center quality assurance (QA) platform built for
 
 ### Prerequisites
 - Rust 1.78 or newer ([install](https://rustup.rs))
-- Redis 6+ accessible at `127.0.0.1:6379` (or set `REDIS_URL` env var)
+- PostgreSQL 14+ accessible at `127.0.0.1:5432` (or set `DATABASE_URL` env var)
 
 ### Run
 
 ```bash
 git clone git@github.com:Saeeddn/crm-quality-inspector.git
 cd crm-quality-inspector
+cp .env.example .env
+# Edit .env and set DATABASE_URL + ADMIN_PASSWORD
 cargo build --release
-REDIS_URL=redis://127.0.0.1:6379/0 ./target/release/crm-quality-inspector
+./target/release/crm-quality-inspector
 ```
 
 Open http://localhost:3000 in your browser.
 
-**Default login**:
+**Default login** (only when `ADMIN_PASSWORD` is not set):
 - Username: `admin`
 - Password: `ADMIN_PASS_REDACTED`
 
+⚠️ **Set `ADMIN_PASSWORD` in `.env` for production use.**
+
 ### Configuration
 
-Environment variables:
-- `REDIS_URL` — Redis connection string (default: `redis://127.0.0.1:6379/0`)
-- `BIND_ADDR` — Listen address (default: `0.0.0.0:3000`)
+All config is via environment variables (or a `.env` file you create from `.env.example`):
+- `DATABASE_URL` — PostgreSQL connection string (default: localhost with placeholder password)
+- `ADMIN_USERNAME` — Admin username (default: `admin`)
+- `ADMIN_PASSWORD` — Admin password (default: `ADMIN_PASS_REDACTED` — **insecure, override in prod!**)
+
+### 📚 API Documentation (Swagger UI)
+
+After starting the server, open:
+- Interactive docs: <http://localhost:3000/swagger-ui> (or `/docs`)
+- OpenAPI JSON spec: <http://localhost:3000/openapi.json>
 
 ---
 
