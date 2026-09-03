@@ -166,24 +166,31 @@ async function enterApp() {
 async function loadDashboard() {
   if (State.loaded.dashboard) { renderDashboard(); return; }
   try {
-    // Performance optimization: load ONLY the dashboard summary + per-interaction scores.
+    // Performance optimization: load ONLY the dashboard summary + bulk scores.
     // Don't load full interactions/agents tables here — those are loaded on demand
     // when the user clicks the corresponding tab. This keeps the dashboard render fast
     // even with thousands of interactions.
-    State.dashboard = await withLoading('در حال محاسبه KPI و نمودارها...', () => api('/reports/dashboard'));
+    const [dash, scoresList] = await Promise.all([
+      withLoading('در حال محاسبه KPI و نمودارها...', () => api('/reports/dashboard')),
+      api('/scores')
+    ]);
+    State.dashboard = dash;
+    // Bulk-load all scores into State.scores by interaction_id (used by trend/agent charts)
+    State.scores = {};
+    (scoresList || []).forEach(s => { if (s && s.interaction_id) State.scores[s.interaction_id] = s; });
     State.loaded.dashboard = true;
     cacheSet('dashboard', State.dashboard);
-    // Render dashboard immediately (charts work with the counts only)
+    // Render dashboard immediately — score+agent charts now have data
     renderDashboard();
-    // Defer table loading so the dashboard paints fast. If the user has
-    // already navigated to a non-default page, respect that.
+    // In the background, load the lightweight pages we need for interactions tab:
+    // - First page of interactions (so the tab doesn't appear empty if user clicks it)
+    // - First page of agents (so chart labels resolve)
+    // Both are skipped if the user has already navigated to a tab.
     setTimeout(async () => {
-      if (!State.loaded.interactions && State.page.interactions <= 1) {
+      if (!State.loaded.interactions) {
         await loadInteractions();
-        loadAllScoresLazy();
-      } else if (!State.loaded.interactions) {
-        await loadInteractions();
-        loadAllScoresLazy();
+        // loadInteractions already calls loadAllScoresLazy, but State.scores is already
+        // populated from /scores — loadAllScoresLazy will be a quick no-op refresh.
       }
       if (!State.loaded.agents) await loadAgents();
     }, 100);
@@ -231,12 +238,21 @@ async function loadInteractions(force = false) {
   renderInteractions();
 }
 async function loadAllScoresLazy() {
-  const promises = State.interactions.map(it =>
+  // Skip scores we already have (bulk-loaded by loadDashboard via GET /scores)
+  const missing = State.interactions.filter(it => !State.scores[it.id]);
+  if (missing.length === 0) {
+    renderInteractions();
+    if (document.getElementById('trendChart')) renderTrendChart();
+    if (State.loaded.agents && document.getElementById('agentChart') && State.agentChart === null) {
+      renderAgentChart();
+    }
+    return;
+  }
+  const promises = missing.map(it =>
     api('/scoring/' + it.id).then(s => { if (s) State.scores[it.id] = s; }).catch(() => null)
   );
   await Promise.all(promises);
   renderInteractions();
-  // Refresh charts now that scores are loaded
   if (document.getElementById('trendChart')) renderTrendChart();
   if (State.loaded.agents && document.getElementById('agentChart') && State.agentChart === null) {
     renderAgentChart();

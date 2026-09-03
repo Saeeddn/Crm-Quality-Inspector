@@ -34,6 +34,7 @@ pub fn router() -> Router<AppState> {
         .route("/scoring/score", post(submit_score))
         .route("/scoring/auto/:interaction_id", post(auto_score_interaction))
         .route("/scoring/:id", get(get_score_by_interaction))
+        .route("/scores", get(list_scores))
         .route("/issues", get(list_issues).post(create_issue_handler))
         .route("/issues/:id/resolve", patch(resolve_issue))
         .route("/recommendations", get(list_recommendations))
@@ -383,6 +384,14 @@ pub async fn get_score_by_interaction(
         Some(s) => Ok(ok(s)),
         None => Ok(ok(serde_json::Value::Null)),
     }
+}
+
+// Bulk fetch all scores — used by dashboard charts to avoid N+1 calls
+pub async fn list_scores(
+    State(state): State<AppState>,
+) -> AppResult<Json<serde_json::Value>> {
+    let scores = state.store.scan_scores().await?;
+    Ok(ok(scores))
 }
 
 // ============ Issues ============
