@@ -163,6 +163,8 @@ async function loadDashboard() {
     const iData = await api('/interactions?page=1&limit=1000');
     State.interactions = iData.items || [];
     State.interactionsTotal = iData.total;
+    // When loading all (limit=1000), compute total_pages based on default pageSize
+    State.interactionsTotalPages = Math.max(1, Math.ceil((iData.total || State.interactions.length) / (State.pageSize || 10)));
     State.loaded.interactions = true;
     State.agents = await api('/agents');
     State.loaded.agents = true;
