@@ -157,7 +157,6 @@ async function enterApp() {
 
 async function loadDashboard() {
   if (State.loaded.dashboard) { renderDashboard(); return; }
-  const c = cacheGet('dashboard'); if (c) { State.dashboard = c; State.loaded.dashboard = true; renderDashboard(); return; }
   try {
     State.interactions = await api('/interactions');
     State.loaded.interactions = true;
