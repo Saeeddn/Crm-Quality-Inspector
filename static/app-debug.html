@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>App Debug</title>
+<style>
+body { background: #1a1d27; color: #e6e8ee; font-family: monospace; padding: 20px; }
+#log { background: #000; padding: 10px; border-radius: 4px; white-space: pre-wrap; font-size: 12px; min-height: 200px; }
+.ok { color: #22c55e; }
+.err { color: #ef4444; }
+.info { color: #6366f1; }
+.warn { color: #f59e0b; }
+</style>
+</head>
+<body>
+<h2>App.js Debug</h2>
+<p>این صفحه مثل index.html عمل میکنه ولی app.js رو بعد از load میکنه و خطاها رو میگیره</p>
+<div id="log"></div>
+<canvas id="trendChart" width="600" height="200" style="background:#2a2f3d;margin:5px 0"></canvas>
+<canvas id="scoreChart" width="300" height="200" style="background:#2a2f3d;margin:5px 0"></canvas>
+<canvas id="agentChart" width="300" height="200" style="background:#2a2f3d;margin:5px 0"></canvas>
+
+<script>
+const log = document.getElementById('log');
+function add(msg, cls='info') {
+  log.innerHTML += `<span class="${cls}">[${new Date().toISOString().slice(11,23)}] ${msg}</span>\n`;
+  log.scrollTop = log.scrollHeight;
+}
+
+window.addEventListener('error', e => {
+  add('❌ GLOBAL ERROR: ' + e.message, 'err');
+  if (e.error && e.error.stack) add(e.error.stack, 'err');
+});
+
+window.addEventListener('unhandledrejection', e => {
+  add('❌ UNHANDLED PROMISE: ' + e.reason, 'err');
+  if (e.reason && e.reason.stack) add(e.reason.stack, 'err');
+});
+
+(async function() {
+  add('=== شروع ===', 'info');
+  
+  // Step 1: load jQuery
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = '/static/jquery.js';
+    s.onload = res;
+    s.onerror = () => { add('jQuery load FAIL', 'err'); rej(); };
+    document.head.appendChild(s);
+  });
+  add('jQuery loaded', 'ok');
+  
+  // Step 2: load Chart.js
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = '/static/chart.js';
+    s.onload = res;
+    s.onerror = () => { add('Chart.js load FAIL', 'err'); rej(); };
+    document.head.appendChild(s);
+  });
+  add('Chart.js loaded, version: ' + Chart.version, 'ok');
+  
+  // Step 3: load app.js
+  add('Now loading app.js...', 'info');
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = '/static/app.js?v=10';
+    s.onload = () => { add('app.js loaded OK', 'ok'); res(); };
+    s.onerror = () => { add('app.js load FAIL', 'err'); rej(); };
+    document.head.appendChild(s);
+  });
+  
+  // Check if key functions exist
+  add('typeof loadDashboard: ' + typeof loadDashboard, typeof loadDashboard === 'function' ? 'ok' : 'err');
+  add('typeof renderTrendChart: ' + typeof renderTrendChart, typeof renderTrendChart === 'function' ? 'ok' : 'err');
+  add('typeof renderScoreChart: ' + typeof renderScoreChart, typeof renderScoreChart === 'function' ? 'ok' : 'err');
+  add('typeof renderAgentChart: ' + typeof renderAgentChart, typeof renderAgentChart === 'function' ? 'ok' : 'err');
+  add('typeof enterApp: ' + typeof enterApp, typeof enterApp === 'function' ? 'ok' : 'err');
+  add('State.agents: ' + (State ? State.agents.length : 'undefined'));
+  add('typeof $: ' + typeof $, typeof $ === 'function' ? 'ok' : 'err');
+  
+  // Step 4: login manually
+  add('Logging in manually...', 'info');
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: 'admin', password: 'ADMIN_PASS_REDACTED'})
+    });
+    const j = await r.json();
+    add('Login success: ' + j.success, j.success ? 'ok' : 'err');
+    if (j.success) {
+      add('Setting token...', 'info');
+      setToken(j.data.token, { username: j.data.username, is_admin: j.data.is_admin });
+      add('Token set. State.token: ' + (State.token ? 'YES' : 'NO'), 'ok');
+      
+      add('Calling enterApp()...', 'info');
+      try {
+        await enterApp();
+        add('enterApp() returned', 'ok');
+        add('State.agents.length: ' + State.agents.length, State.agents.length > 0 ? 'ok' : 'err');
+        add('State.scores keys: ' + Object.keys(State.scores).length, Object.keys(State.scores).length > 0 ? 'ok' : 'err');
+        add('State.interactions.length: ' + State.interactions.length, State.interactions.length > 0 ? 'ok' : 'err');
+        
+        // Try to render charts manually
+        add('Calling renderDashboard() manually...', 'info');
+        renderDashboard();
+        add('renderDashboard() done', 'ok');
+        add('State.trendChart: ' + (State.trendChart ? 'YES' : 'NO'), State.trendChart ? 'ok' : 'err');
+        add('State.scoreChart: ' + (State.scoreChart ? 'YES' : 'NO'), State.scoreChart ? 'ok' : 'err');
+        add('State.agentChart: ' + (State.agentChart ? 'YES' : 'NO'), State.agentChart ? 'ok' : 'err');
+      } catch(e) {
+        add('enterApp() ERROR: ' + e.message, 'err');
+        add(e.stack, 'err');
+      }
+    }
+  } catch(e) {
+    add('Login error: ' + e.message, 'err');
+    add(e.stack, 'err');
+  }
+  
+  add('=== پایان ===', 'info');
+})();
+</script>
+</body>
+</html>

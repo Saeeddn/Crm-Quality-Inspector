@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>DOM Ready Test</title>
+<style>
+body { background: #1a1d27; color: #e6e8ee; font-family: monospace; padding: 20px; }
+#log { background: #000; padding: 10px; border-radius: 4px; white-space: pre-wrap; font-size: 12px; min-height: 200px; }
+.ok { color: #22c55e; }
+.err { color: #ef4444; }
+.info { color: #6366f1; }
+</style>
+</head>
+<body>
+<div id="loginScreen"><form id="loginForm"><input id="loginUser"><input id="loginPass" type="password"></form></div>
+<div id="appShell" class="hidden">
+  <div id="kpiGrid"></div>
+  <div id="coverageBar"></div>
+  <canvas id="trendChart" width="600" height="200"></canvas>
+  <canvas id="scoreChart" width="300" height="200"></canvas>
+  <canvas id="agentChart" width="300" height="200"></canvas>
+  <div class="nav-item" data-tab="dashboard"></div>
+  <button id="logoutBtn">logout</button>
+</div>
+
+<div id="log"></div>
+
+<script>
+const log = document.getElementById('log');
+function add(msg, cls='info') {
+  log.innerHTML += `<span class="${cls}">[${new Date().toISOString().slice(11,23)}] ${msg}</span>\n`;
+}
+
+window.addEventListener('error', e => {
+  add('❌ ERROR: ' + e.message + ' at ' + (e.filename||'?') + ':' + e.lineno, 'err');
+});
+
+(async function() {
+  add('DOM ready, elements: loginForm=' + !!document.getElementById('loginForm') + ' trendChart=' + !!document.getElementById('trendChart'), 'info');
+  
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = '/static/jquery.js';
+    s.onload = res;
+    s.onerror = () => { add('jQuery FAIL', 'err'); rej(); };
+    document.head.appendChild(s);
+  });
+  add('jQuery loaded', 'ok');
+  
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = '/static/chart.js';
+    s.onload = res;
+    s.onerror = () => { add('Chart.js FAIL', 'err'); rej(); };
+    document.head.appendChild(s);
+  });
+  add('Chart.js loaded', 'ok');
+  
+  // BEFORE app.js: check if DOM elements exist
+  add('Before app.js: loginForm=' + !!document.getElementById('loginForm'), document.getElementById('loginForm') ? 'ok' : 'err');
+  
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = '/static/app.js?v=10';
+    s.onload = res;
+    s.onerror = () => { add('app.js FAIL', 'err'); rej(); };
+    document.head.appendChild(s);
+  });
+  add('app.js loaded', 'ok');
+  
+  add('typeof loadDashboard: ' + typeof loadDashboard, typeof loadDashboard === 'function' ? 'ok' : 'err');
+  add('typeof $: ' + typeof $ + ' (vanilla=' + (typeof $ === 'function' && $.toString().length < 50 ? 'yes' : 'no') + ')', 'info');
+  
+  // Login
+  const lr = await fetch('/api/auth/login', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({username: 'admin', password: 'ADMIN_PASS_REDACTED'})
+  });
+  const lj = await lr.json();
+  if (lj.success) {
+    setToken(lj.data.token, { username: lj.data.username, is_admin: lj.data.is_admin });
+    add('Token set', 'ok');
+    try {
+      await enterApp();
+      add('enterApp() OK', 'ok');
+      add('State.agents: ' + State.agents.length, State.agents.length > 0 ? 'ok' : 'err');
+      add('State.scores: ' + Object.keys(State.scores).length, Object.keys(State.scores).length > 0 ? 'ok' : 'err');
+      add('State.trendChart: ' + (State.trendChart ? 'YES' : 'NO'), State.trendChart ? 'ok' : 'err');
+      add('State.scoreChart: ' + (State.scoreChart ? 'YES' : 'NO'), State.scoreChart ? 'ok' : 'err');
+      add('State.agentChart: ' + (State.agentChart ? 'YES' : 'NO'), State.agentChart ? 'ok' : 'err');
+    } catch(e) {
+      add('enterApp() ERROR: ' + e.message, 'err');
+    }
+  }
+})();
+</script>
+</body>
+</html>

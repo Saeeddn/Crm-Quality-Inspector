@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>Debug</title>
+<style>
+body { background: #1a1d27; color: #e6e8ee; font-family: monospace; padding: 20px; }
+#log { background: #000; padding: 10px; border-radius: 4px; white-space: pre-wrap; font-size: 12px; }
+.ok { color: #22c55e; }
+.err { color: #ef4444; }
+.info { color: #6366f1; }
+</style>
+</head>
+<body>
+<h2>Real Debug — خط به خط میگم چی لود شد</h2>
+<div id="log"></div>
+<canvas id="c1" width="600" height="200" style="margin:10px 0;background:#2a2f3d"></canvas>
+<canvas id="c2" width="600" height="200" style="margin:10px 0;background:#2a2f3d"></canvas>
+<canvas id="c3" width="600" height="200" style="margin:10px 0;background:#2a2f3d"></canvas>
+
+<script>
+const log = document.getElementById('log');
+function add(msg, cls='') {
+  const time = new Date().toISOString().slice(11, 23);
+  log.innerHTML += `<span class="${cls}">[${time}] ${msg}</span>\n`;
+  log.scrollTop = log.scrollHeight;
+}
+
+window.addEventListener('error', e => {
+  add('❌ JS ERROR: ' + e.message + ' at ' + e.filename + ':' + e.lineno, 'err');
+});
+
+(async function() {
+  add('=== شروع ===', 'info');
+
+  // Step 1: load jQuery
+  add('Step 1: load jQuery...', 'info');
+  try {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = '/static/jquery.js';
+      s.onload = () => { add('  ✓ jQuery loaded', 'ok'); res(); };
+      s.onerror = () => { add('  ✗ jQuery FAILED to load', 'err'); rej(); };
+      document.head.appendChild(s);
+    });
+  } catch(e) {
+    add('  Error loading jQuery: ' + e.message, 'err');
+  }
+
+  // Step 2: check jQuery
+  add('Step 2: check jQuery exists...', 'info');
+  add('  typeof $: ' + typeof $, typeof $ === 'function' ? 'ok' : 'err');
+  add('  typeof window.$: ' + typeof window.$, typeof window.$ === 'function' ? 'ok' : 'err');
+  if (typeof jQuery !== 'undefined') {
+    add('  jQuery version: ' + jQuery.fn.jquery, 'ok');
+  }
+
+  // Step 3: load Chart.js
+  add('Step 3: load Chart.js...', 'info');
+  try {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = '/static/chart.js';
+      s.onload = () => { add('  ✓ Chart.js loaded', 'ok'); res(); };
+      s.onerror = () => { add('  ✗ Chart.js FAILED to load', 'err'); rej(); };
+      document.head.appendChild(s);
+    });
+  } catch(e) {
+    add('  Error loading Chart.js: ' + e.message, 'err');
+  }
+
+  // Step 4: check Chart
+  add('Step 4: check Chart exists...', 'info');
+  add('  typeof Chart: ' + typeof Chart, typeof Chart !== 'undefined' ? 'ok' : 'err');
+  if (typeof Chart !== 'undefined') {
+    add('  Chart.version: ' + Chart.version, 'ok');
+  }
+
+  // Step 5: try to make a chart
+  add('Step 5: try to create a chart...', 'info');
+  try {
+    const c1 = document.getElementById('c1');
+    const ctx = c1.getContext('2d');
+    add('  canvas width: ' + c1.width + ' height: ' + c1.height);
+    add('  ctx OK: ' + (ctx ? 'yes' : 'no'));
+    const ch = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ['1','2','3','4','5'],
+        datasets: [{label: 'test', data: [10,20,30,40,50], borderColor: 'red'}]
+      },
+      options: { responsive: false, animation: false }
+    });
+    add('  ✓ Chart created: ' + typeof ch, 'ok');
+  } catch(e) {
+    add('  ✗ Chart create error: ' + e.message, 'err');
+    add('  Stack: ' + e.stack, 'err');
+  }
+
+  // Step 6: try to fetch dashboard
+  add('Step 6: fetch dashboard from same origin...', 'info');
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: 'admin', password: 'ADMIN_PASS_REDACTED'})
+    });
+    const j = await r.json();
+    add('  login response: ' + r.status + ' success=' + j.success, j.success ? 'ok' : 'err');
+    if (j.success) {
+      const token = j.data.token;
+      const d = await fetch('/api/reports/dashboard', {
+        headers: {'Authorization': 'Bearer ' + token}
+      }).then(r => r.json());
+      add('  dashboard: ' + d.data.interaction_count + ' interactions, ' + d.data.scored_count + ' scored', 'ok');
+    }
+  } catch(e) {
+    add('  ✗ fetch error: ' + e.message, 'err');
+  }
+
+  add('=== پایان ===', 'info');
+})();
+</script>
+</body>
+</html>

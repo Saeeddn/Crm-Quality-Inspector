@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>صف در حال بارگذاری...</title>
+<link rel="stylesheet" href="/static/app.css?v=6">
+</head>
+<body>
+
+<div id="loginScreen"><form id="loginForm"><div><input id="loginUser"><input id="loginPass" type="password"></div></form></div>
+<div id="appShell" class="hidden">
+  <div id="userBadge"></div>
+  <div id="topbarTitle"></div>
+  <div id="kpiGrid"></div>
+  <div id="coverageBar"></div>
+  <div id="connStatus"></div>
+  <span id="logoutBtn"></span>
+  <nav><span class="nav-item" data-tab="dashboard"></span></nav>
+  <div id="page-dashboard" class="page">
+    <canvas id="trendChart" width="600" height="200"></canvas>
+    <canvas id="scoreChart" width="300" height="200"></canvas>
+    <canvas id="agentChart" width="300" height="200"></canvas>
+  </div>
+  <div id="page-interactions" class="page hidden">
+    <table id="interactionsTable"><tbody></tbody></table>
+    <div id="interactionsPager"></div>
+    <input id="fSearch"><select id="fChannel"></select><select id="fAgent"></select><select id="fStatus"></select>
+    <button id="exportCsvBtn"></button>
+  </div>
+  <div id="page-issues" class="page hidden"><table id="issuesTable"></table><select id="iStatus"></select><select id="iSeverity"></select></div>
+  <div id="page-agents" class="page hidden"><table id="agentsTable"></table></div>
+  <div id="page-customers" class="page hidden"><table id="customersTable"></table></div>
+  <div id="page-kpis" class="page hidden"><button id="seedKpisBtn"></button><button id="newKpiBtn"></button></div>
+  <div id="page-users" class="page hidden"><button id="newUserBtn"></button></div>
+  <div id="page-report" class="page hidden"><select id="reportAgent"></select></div>
+  <div id="modal" class="modal-overlay"><div class="modal"><div id="modalTitle"></div><div id="modalBody"></div><div id="modalFooter"></div><button data-action="close-modal"></button></div></div>
+  <div id="toast"></div>
+  <div id="loadingOverlay" class="loading-overlay" hidden><div id="loadingText"></div></div>
+</div>
+
+<div id="log" style="position:fixed;bottom:0;left:0;right:0;max-height:50vh;overflow:auto;background:#000;color:#0f0;padding:8px;font:11px monospace;z-index:99999;white-space:pre-wrap"></div>
+
+<script>
+const log = document.getElementById('log');
+function add(msg, cls) {
+  const c = cls || '#0f0';
+  const t = new Date().toISOString().slice(11, 23);
+  log.innerHTML += `<span style="color:${c}">[${t}] ${msg}</span>\n`;
+  log.scrollTop = log.scrollHeight;
+}
+
+window.addEventListener('error', e => {
+  add('❌ ' + e.message + ' @ ' + (e.filename||'').split('/').pop() + ':' + e.lineno, '#f44');
+  if (e.error && e.error.stack) add(e.error.stack, '#f88');
+});
+window.addEventListener('unhandledrejection', e => {
+  add('❌ PROMISE: ' + e.reason, '#f44');
+});
+
+add('--- START ---', '#fff');
+
+(async function() {
+  add('DOM elements: loginForm=' + !!document.getElementById('loginForm') + ' trendChart=' + !!document.getElementById('trendChart'), '#fff');
+  
+  for (const lib of ['jquery', 'chart']) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = '/static/' + lib + '.js';
+      s.onload = () => { add('✓ ' + lib + ' loaded', '#0f0'); res(); };
+      s.onerror = () => { add('✗ ' + lib + ' FAIL', '#f44'); rej(); };
+      document.head.appendChild(s);
+    });
+  }
+  
+  // load app.js
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = '/static/app.js?v=10';
+    s.onload = res;
+    s.onerror = () => { add('✗ app.js FAIL', '#f44'); rej(); };
+    document.head.appendChild(s);
+  });
+  add('✓ app.js loaded', '#0f0');
+  
+  // login
+  const lr = await fetch('/api/auth/login', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({username: 'admin', password: 'ADMIN_PASS_REDACTED'})
+  });
+  const lj = await lr.json();
+  if (lj.success) {
+    add('✓ login', '#0f0');
+    setToken(lj.data.token, { username: lj.data.username, is_admin: lj.data.is_admin });
+    try {
+      await enterApp();
+      add('✓ enterApp', '#0f0');
+      setTimeout(() => {
+        add('State.agents=' + State.agents.length, State.agents.length > 0 ? '#0f0' : '#f44');
+        add('State.scores=' + Object.keys(State.scores).length, Object.keys(State.scores).length > 0 ? '#0f0' : '#f44');
+        add('State.trendChart=' + (State.trendChart ? 'YES' : 'NO'), State.trendChart ? '#0f0' : '#f44');
+        add('State.scoreChart=' + (State.scoreChart ? 'YES' : 'NO'), State.scoreChart ? '#0f0' : '#f44');
+        add('State.agentChart=' + (State.agentChart ? 'YES' : 'NO'), State.agentChart ? '#0f0' : '#f44');
+      }, 500);
+    } catch(e) {
+      add('✗ enterApp: ' + e.message, '#f44');
+    }
+  } else {
+    add('✗ login fail', '#f44');
+  }
+})();
+</script>
+</body>
+</html>
