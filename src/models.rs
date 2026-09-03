@@ -536,4 +536,6 @@ pub struct ListQuery {
     pub status: Option<String>,
     #[serde(default)]
     pub limit: Option<i64>,
+    #[serde(default)]
+    pub page: Option<i64>,
 }

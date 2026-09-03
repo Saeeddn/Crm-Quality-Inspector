@@ -195,8 +195,22 @@ pub async fn delete_user_handler(
 
 // ============ Agents ============
 
-pub async fn list_agents(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
-    Ok(ok(state.store.list_agents().await?))
+pub async fn list_agents(
+    State(state): State<AppState>,
+    Query(q): Query<crate::models::ListQuery>,
+) -> AppResult<Json<serde_json::Value>> {
+    let limit: i64 = q.limit.unwrap_or(10).max(1);
+    let page: i64 = q.page.unwrap_or(1).max(1);
+    let offset = (page - 1) * limit;
+    let (items, total) = state.store.list_agents_paginated(limit, offset).await?;
+    let total_pages = if limit > 0 { (total + limit - 1) / limit } else { 1 };
+    Ok(ok(json!({
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages
+    })))
 }
 
 pub async fn get_agent(
@@ -239,8 +253,22 @@ pub async fn delete_agent(
 
 // ============ Customers ============
 
-pub async fn list_customers(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
-    Ok(ok(state.store.list_customers().await?))
+pub async fn list_customers(
+    State(state): State<AppState>,
+    Query(q): Query<crate::models::ListQuery>,
+) -> AppResult<Json<serde_json::Value>> {
+    let limit: i64 = q.limit.unwrap_or(10).max(1);
+    let page: i64 = q.page.unwrap_or(1).max(1);
+    let offset = (page - 1) * limit;
+    let (items, total) = state.store.list_customers_paginated(limit, offset).await?;
+    let total_pages = if limit > 0 { (total + limit - 1) / limit } else { 1 };
+    Ok(ok(json!({
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages
+    })))
 }
 
 pub async fn get_customer(
@@ -361,13 +389,25 @@ pub async fn get_score_by_interaction(
 
 pub async fn list_issues(
     State(state): State<AppState>,
-    Query(q): Query<ListQuery>,
+    Query(q): Query<crate::models::ListQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let mut v = state.store.list_issues().await?;
-    if let Some(sev) = &q.severity { v.retain(|x| &x.severity == sev); }
-    if let Some(st) = &q.status { v.retain(|x| &x.status == st); }
-    if let Some(aid) = &q.agent_id { v.retain(|x| &x.agent_id == aid); }
-    Ok(ok(v))
+    let limit: i64 = q.limit.unwrap_or(10).max(1);
+    let page: i64 = q.page.unwrap_or(1).max(1);
+    let offset = (page - 1) * limit;
+    let (items, total) = state.store.list_issues_paginated(
+        limit, offset,
+        q.severity.as_deref(),
+        q.status.as_deref(),
+        q.agent_id.as_deref(),
+    ).await?;
+    let total_pages = if limit > 0 { (total + limit - 1) / limit } else { 1 };
+    Ok(ok(json!({
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages
+    })))
 }
 
 pub async fn create_issue_handler(

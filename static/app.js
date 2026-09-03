@@ -23,6 +23,12 @@ const State = {
   pageSize: 10,
   interactionsTotal: 0,
   interactionsTotalPages: 1,
+  agentsTotal: 0,
+  agentsTotalPages: 1,
+  customersTotal: 0,
+  customersTotalPages: 1,
+  issuesTotal: 0,
+  issuesTotalPages: 1,
 };
 
 function setToken(t, u) {
@@ -166,7 +172,11 @@ async function loadDashboard() {
     // When loading all (limit=1000), compute total_pages based on default pageSize
     State.interactionsTotalPages = Math.max(1, Math.ceil((iData.total || State.interactions.length) / (State.pageSize || 10)));
     State.loaded.interactions = true;
-    State.agents = await api('/agents');
+    // Load all agents (small dataset) for chart lookups
+    const aData = await api('/agents?page=1&limit=1000');
+    State.agents = aData.items || [];
+    State.agentsTotal = aData.total;
+    State.agentsTotalPages = aData.total_pages || 1;
     State.loaded.agents = true;
     const scorePromises = State.interactions.map(it =>
       api('/scoring/' + it.id).then(s => { if (s) State.scores[it.id] = s; }).catch(() => null)
@@ -184,16 +194,30 @@ async function loadDashboard() {
   }
 }
 
-async function loadAgents() {
-  if (State.loaded.agents) { renderAgents(); return; }
-  const c = cacheGet('agents'); if (c) { State.agents = c; State.loaded.agents = true; renderAgents(); return; }
-  State.agents = await api('/agents'); State.loaded.agents = true; cacheSet('agents', State.agents);
+async function loadAgents(force = false) {
+  const pageSize = State.pageSize || 10;
+  const page = State.page.agents || 1;
+  if (!force && State.loaded.agents) { renderAgents(); return; }
+  const c = cacheGet('agents'); if (c) { State.agents = c; State.loaded.agents = true; State.agentsTotal = c.length; State.agentsTotalPages = 1; renderAgents(); return; }
+  const data = await api(`/agents?page=${page}&limit=${pageSize}`);
+  State.agents = data.items || [];
+  State.agentsTotal = data.total;
+  State.agentsTotalPages = data.total_pages;
+  State.loaded.agents = true;
+  cacheSet('agents', State.agents);
   renderAgents();
 }
-async function loadCustomers() {
-  if (State.loaded.customers) { renderCustomers(); return; }
-  const c = cacheGet('customers'); if (c) { State.customers = c; State.loaded.customers = true; renderCustomers(); return; }
-  State.customers = await api('/customers'); State.loaded.customers = true; cacheSet('customers', State.customers);
+async function loadCustomers(force = false) {
+  const pageSize = State.pageSize || 10;
+  const page = State.page.customers || 1;
+  if (!force && State.loaded.customers) { renderCustomers(); return; }
+  const c = cacheGet('customers'); if (c) { State.customers = c; State.loaded.customers = true; State.customersTotal = c.length; State.customersTotalPages = 1; renderCustomers(); return; }
+  const data = await api(`/customers?page=${page}&limit=${pageSize}`);
+  State.customers = data.items || [];
+  State.customersTotal = data.total;
+  State.customersTotalPages = data.total_pages;
+  State.loaded.customers = true;
+  cacheSet('customers', State.customers);
   renderCustomers();
 }
 async function loadInteractions(force = false) {
@@ -215,9 +239,21 @@ async function loadAllScoresLazy() {
   await Promise.all(promises);
   renderInteractions();
 }
-async function loadIssues() {
-  if (State.loaded.issues) { renderIssues(); return; }
-  State.issues = await api('/issues'); State.loaded.issues = true;
+async function loadIssues(force = false) {
+  const pageSize = State.pageSize || 10;
+  const page = State.page.issues || 1;
+  if (!force && State.loaded.issues) { renderIssues(); return; }
+  // Build filter query
+  const params = new URLSearchParams({ page, limit: pageSize });
+  const status = $('#iStatus')?.value;
+  const severity = $('#iSeverity')?.value;
+  if (status) params.set('status', status);
+  if (severity) params.set('severity', severity);
+  const data = await api(`/issues?${params}`);
+  State.issues = data.items || [];
+  State.issuesTotal = data.total;
+  State.issuesTotalPages = data.total_pages;
+  State.loaded.issues = true;
   renderIssues();
 }
 async function loadKpis() {
@@ -736,7 +772,7 @@ function renderAgents() {
   `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">کارشناسی یافت نشد</td></tr>`;
   tbody.querySelectorAll('[data-toggle-agent]').forEach(b => b.addEventListener('click', () => toggleAgent(b.dataset.toggleAgent, b.dataset.active === 'true')));
   tbody.querySelectorAll('[data-agent-report]').forEach(b => b.addEventListener('click', () => { switchTab('report'); setTimeout(() => { $('#reportAgent').value = b.dataset.agentReport; renderReport(); }, 50); }));
-  renderPagination('#agentsPager', State.agents.length, State.page.agents, Math.ceil(State.agents.length / State.pageSize), (p) => { State.page.agents = p; renderAgents(); });
+  renderPagination('#agentsPager', State.agentsTotal || 0, State.page.agents, State.agentsTotalPages || 1, (p) => { State.page.agents = p; loadAgents(true); });
 }
 
 async function toggleAgent(id, active) {
@@ -789,7 +825,7 @@ function renderCustomers() {
     try { await api('/customers/' + b.dataset.delCustomer, { method: 'DELETE' }); State.loaded.customers = false; await loadCustomers(); toast('حذف شد'); }
     catch (e) { toast(e.message, 'error'); }
   }));
-  renderPagination('#customersPager', State.customers.length, State.page.customers, Math.ceil(State.customers.length / State.pageSize), (p) => { State.page.customers = p; renderCustomers(); });
+  renderPagination('#customersPager', State.customersTotal || 0, State.page.customers, State.customersTotalPages || 1, (p) => { State.page.customers = p; loadCustomers(true); });
 }
 
 function openEditCustomer(id) {
@@ -1035,7 +1071,7 @@ function renderIssues() {
   }).join('') || `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">ایرادی یافت نشد</td></tr>`;
   tbody.querySelectorAll('[data-resolve-issue]').forEach(b => b.addEventListener('click', () => openResolve(b.dataset.resolveIssue)));
   const filtered = State.issues.filter(x => ($('#iStatus')?.value ? x.status === $('#iStatus').value : true) && ($('#iSeverity')?.value ? x.severity === $('#iSeverity').value : true));
-  renderPagination('#issuesPager', filtered.length, State.page.issues, Math.ceil(filtered.length / State.pageSize), (p) => { State.page.issues = p; renderIssues(); });
+  renderPagination('#issuesPager', State.issuesTotal || 0, State.page.issues, State.issuesTotalPages || 1, (p) => { State.page.issues = p; loadIssues(true); });
 }
 
 $('#iStatus')?.addEventListener('change', renderIssues);

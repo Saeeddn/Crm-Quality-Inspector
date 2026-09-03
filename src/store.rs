@@ -273,6 +273,23 @@ impl Store {
         }).collect())
     }
 
+    pub async fn list_agents_paginated(&self, limit: i64, offset: i64) -> AppResult<(Vec<Agent>, i64)> {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agents")
+            .fetch_one(&self.pool).await?;
+        let rows = sqlx::query("SELECT id, name, department, position, active, created_at FROM agents ORDER BY name LIMIT $1 OFFSET $2")
+            .bind(limit).bind(offset)
+            .fetch_all(&self.pool).await?;
+        let out: Vec<Agent> = rows.into_iter().map(|r| Agent {
+            id: r.get("id"),
+            name: r.get("name"),
+            department: r.get("department"),
+            position: r.get("position"),
+            active: r.get("active"),
+            created_at: r.get("created_at"),
+        }).collect();
+        Ok((out, total))
+    }
+
     pub async fn delete_agent(&self, id: &str) -> AppResult<()> {
         sqlx::query("DELETE FROM agents WHERE id = $1").bind(id).execute(&self.pool).await?;
         Ok(())
@@ -316,6 +333,24 @@ impl Store {
             notes: r.get("notes"),
             created_at: r.get("created_at"),
         }).collect())
+    }
+
+    pub async fn list_customers_paginated(&self, limit: i64, offset: i64) -> AppResult<(Vec<Customer>, i64)> {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM customers")
+            .fetch_one(&self.pool).await?;
+        let rows = sqlx::query("SELECT id, name, phone, product_type, segment, notes, created_at FROM customers ORDER BY name LIMIT $1 OFFSET $2")
+            .bind(limit).bind(offset)
+            .fetch_all(&self.pool).await?;
+        let out: Vec<Customer> = rows.into_iter().map(|r| Customer {
+            id: r.get("id"),
+            name: r.get("name"),
+            phone: r.get("phone"),
+            product_type: r.get("product_type"),
+            segment: r.get("segment"),
+            notes: r.get("notes"),
+            created_at: r.get("created_at"),
+        }).collect();
+        Ok((out, total))
     }
 
     pub async fn delete_customer(&self, id: &str) -> AppResult<()> {
@@ -588,6 +623,50 @@ impl Store {
             created_at: r.get("created_at"),
             resolved_at: r.get("resolved_at"),
         }).collect())
+    }
+
+    pub async fn list_issues_paginated(&self, limit: i64, offset: i64, severity: Option<&str>, status: Option<&str>, agent_id: Option<&str>) -> AppResult<(Vec<Issue>, i64)> {
+        // Build WHERE clause dynamically
+        let mut where_clauses: Vec<String> = Vec::new();
+        if severity.is_some() { where_clauses.push("severity = $3".to_string()); }
+        if status.is_some() { where_clauses.push("status = $4".to_string()); }
+        if agent_id.is_some() { where_clauses.push("agent_id = $5".to_string()); }
+        let where_sql = if where_clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", where_clauses.join(" AND "))
+        };
+
+        // Count query
+        let count_sql = format!("SELECT COUNT(*) FROM issues {}", where_sql);
+        let mut count_query = sqlx::query_scalar(&count_sql);
+        if let Some(s) = severity { count_query = count_query.bind(s); }
+        if let Some(s) = status { count_query = count_query.bind(s); }
+        if let Some(a) = agent_id { count_query = count_query.bind(a); }
+        let total: i64 = count_query.fetch_one(&self.pool).await?;
+
+        // List query
+        let list_sql = format!("SELECT id, interaction_id, agent_id, severity, category, description, status, root_cause, corrective_action, due_at, created_at, resolved_at FROM issues {} ORDER BY created_at DESC LIMIT $1 OFFSET $2", where_sql);
+        let mut list_query = sqlx::query(&list_sql).bind(limit).bind(offset);
+        if let Some(s) = severity { list_query = list_query.bind(s); }
+        if let Some(s) = status { list_query = list_query.bind(s); }
+        if let Some(a) = agent_id { list_query = list_query.bind(a); }
+        let rows = list_query.fetch_all(&self.pool).await?;
+        let out: Vec<Issue> = rows.into_iter().map(|r| Issue {
+            id: r.get("id"),
+            interaction_id: r.get("interaction_id"),
+            agent_id: r.get("agent_id"),
+            severity: r.get("severity"),
+            category: r.get("category"),
+            description: r.get("description"),
+            status: r.get("status"),
+            root_cause: r.get("root_cause"),
+            corrective_action: r.get("corrective_action"),
+            due_at: r.get("due_at"),
+            created_at: r.get("created_at"),
+            resolved_at: r.get("resolved_at"),
+        }).collect();
+        Ok((out, total))
     }
 
     // =================== METRICS ===================
