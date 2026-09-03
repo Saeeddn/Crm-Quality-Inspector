@@ -17,6 +17,8 @@ const State = {
   dashboard: null, agentsAvg: {},
   loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, kpis: false, dashboard: false, rec: false },
   trendChart: null,
+  scoreChart: null,
+  agentChart: null,
   page: { interactions: 1, issues: 1, agents: 1, customers: 1 },
   pageSize: 20,
 };
@@ -259,6 +261,8 @@ function renderDashboard() {
     <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, d.coverage || 0)}%"></div></div>
   `;
   renderTrendChart();
+  renderScoreChart(d);
+  renderAgentChart();
 }
 
 function renderTrendChart() {
@@ -296,7 +300,67 @@ function renderTrendChart() {
   });
 }
 
-// ============ Pagination helper ============
+function renderScoreChart(d) {
+  const canvas = $('#scoreChart');
+  if (!canvas) return;
+  if (State.scoreChart) { State.scoreChart.destroy(); State.scoreChart = null; }
+  const scores = Object.values(State.scores);
+  const healthy = scores.filter(s => s.overall_score >= 80).length;
+  const improvement = scores.filter(s => s.overall_score >= 60 && s.overall_score < 80).length;
+  const critical = scores.filter(s => s.overall_score < 60).length;
+  const ctx = canvas.getContext('2d');
+  State.scoreChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['سالم (≥80)', 'نیازمند بهبود (60-80)', 'بحرانی (<60)'],
+      datasets: [{
+        data: [healthy, improvement, critical],
+        backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { color: '#e6e8ee', padding: 12 } } }
+    }
+  });
+}
+
+function renderAgentChart() {
+  const canvas = $('#agentChart');
+  if (!canvas) return;
+  if (State.agentChart) { State.agentChart.destroy(); State.agentChart = null; }
+  const agents = State.agents.filter(a => a.active);
+  const labels = agents.map(a => a.name);
+  const data = labels.map(name => {
+    const scores = Object.values(State.scores).filter(s => {
+      const interaction = State.interactions.find(i => i.id === s.interaction_id);
+      return interaction && interaction.agent_id === agents.find(a => a.name === name)?.id;
+    });
+    return scores.length ? scores.reduce((a, b) => a + b.overall_score, 0) / scores.length : 0;
+  });
+  const ctx = canvas.getContext('2d');
+  State.agentChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'میانگین امتیاز',
+        data,
+        backgroundColor: '#6366f1',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8a92a6' }, grid: { display: false } },
+        y: { min: 0, max: 100, ticks: { color: '#8a92a6' }, grid: { color: '#2a2f3d' } }
+      }
+    }
+  });
+}
 function renderPagination(selector, total, page, totalPages, onChange) {
   const el = document.querySelector(selector);
   if (!el) return;
@@ -627,6 +691,7 @@ function renderAgents() {
   `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">کارشناسی یافت نشد</td></tr>`;
   tbody.querySelectorAll('[data-toggle-agent]').forEach(b => b.addEventListener('click', () => toggleAgent(b.dataset.toggleAgent, b.dataset.active === 'true')));
   tbody.querySelectorAll('[data-agent-report]').forEach(b => b.addEventListener('click', () => { switchTab('report'); setTimeout(() => { $('#reportAgent').value = b.dataset.agentReport; renderReport(); }, 50); }));
+  renderPagination('#agentsPager', State.agents.length, State.page.agents, Math.ceil(State.agents.length / (State.pageSize || 20)), (p) => { State.page.agents = p; renderAgents(); });
 }
 
 async function toggleAgent(id, active) {
@@ -679,6 +744,7 @@ function renderCustomers() {
     try { await api('/customers/' + b.dataset.delCustomer, { method: 'DELETE' }); State.loaded.customers = false; await loadCustomers(); toast('حذف شد'); }
     catch (e) { toast(e.message, 'error'); }
   }));
+  renderPagination('#customersPager', State.customers.length, State.page.customers, Math.ceil(State.customers.length / (State.pageSize || 20)), (p) => { State.page.customers = p; renderCustomers(); });
 }
 
 function openEditCustomer(id) {
@@ -923,6 +989,8 @@ function renderIssues() {
     </tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">ایرادی یافت نشد</td></tr>`;
   tbody.querySelectorAll('[data-resolve-issue]').forEach(b => b.addEventListener('click', () => openResolve(b.dataset.resolveIssue)));
+  const filtered = State.issues.filter(x => ($('#iStatus')?.value ? x.status === $('#iStatus').value : true) && ($('#iSeverity')?.value ? x.severity === $('#iSeverity').value : true));
+  renderPagination('#issuesPager', filtered.length, State.page.issues, Math.ceil(filtered.length / (State.pageSize || 20)), (p) => { State.page.issues = p; renderIssues(); });
 }
 
 $('#iStatus')?.addEventListener('change', renderIssues);

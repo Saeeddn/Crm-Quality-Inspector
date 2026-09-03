@@ -77,8 +77,18 @@
         <div class="card-body" id="coverageBar"></div>
       </div>
       <div class="card">
-        <div class="card-header"><h3>نمودار روند امتیازات</h3></div>
+        <div class="card-header"><h3>روند امتیازات</h3></div>
         <div class="card-body" style="height:260px"><canvas id="trendChart"></canvas></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="card">
+          <div class="card-header"><h3>توزیع کیفیت</h3></div>
+          <div class="card-body" style="height:260px"><canvas id="scoreChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>عملکرد کارشناسان</h3></div>
+          <div class="card-body" style="height:260px"><canvas id="agentChart"></canvas></div>
+        </div>
       </div>
     </div>
 
@@ -124,6 +134,7 @@
           <thead><tr><th>نام</th><th>واحد</th><th>سمت</th><th>وضعیت</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
+        <div id="agentsPager" style="padding:8px 0"></div>
       </div>
     </div>
 
@@ -137,6 +148,7 @@
           <thead><tr><th>نام</th><th>تلفن</th><th>محصول</th><th>بخش</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
+        <div id="customersPager" style="padding:8px 0"></div>
       </div>
     </div>
 
@@ -162,6 +174,7 @@
           <thead><tr><th>شدت</th><th>دسته</th><th>شرح</th><th>وضعیت</th><th>مهلت</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
+        <div id="issuesPager" style="padding:8px 0"></div>
       </div>
     </div>
 
@@ -227,6 +240,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=6"></script>
+<script src="/static/app.js?v=7"></script>
 </body>
 </html>
