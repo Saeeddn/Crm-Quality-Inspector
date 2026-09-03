@@ -465,20 +465,29 @@ function renderInteractions() {
   }
 
   // If server didn't paginate (returned all rows), do client-side filtering
-  let rows = State.interactions.slice();
-  if (search) rows = rows.filter(i => (i.subject + ' ' + i.transcript + ' ' + (i.tags||[]).join(' ')).toLowerCase().includes(search));
-  if (channel) rows = rows.filter(i => i.channel === channel);
-  if (agentId) rows = rows.filter(i => i.agent_id === agentId);
-  if (status === 'scored') rows = rows.filter(i => State.scores[i.id]);
-  if (status === 'unscored') rows = rows.filter(i => !State.scores[i.id]);
-  rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  // If server paginated (interactionsTotal set), we already have only the current page
+  const isServerPaginated = State.interactionsTotal > 0 && State.interactionsTotal !== State.interactions.length;
+  let rows = State.interactions;
+  if (!isServerPaginated) {
+    rows = State.interactions.slice();
+    if (search) rows = rows.filter(i => (i.subject + ' ' + i.transcript + ' ' + (i.tags||[]).join(' ')).toLowerCase().includes(search));
+    if (channel) rows = rows.filter(i => i.channel === channel);
+    if (agentId) rows = rows.filter(i => i.agent_id === agentId);
+    if (status === 'scored') rows = rows.filter(i => State.scores[i.id]);
+    if (status === 'unscored') rows = rows.filter(i => !State.scores[i.id]);
+    rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  } else {
+    // Server-paginated: just sort the current page; filters would need server support
+    rows = State.interactions.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
 
   // Use server-provided total if available, else compute
   const total = State.interactionsTotal || rows.length;
   const totalPages = State.interactionsTotalPages || Math.max(1, Math.ceil(rows.length / pageSize));
   const page = State.page.interactions || 1;
-  const start = (page - 1) * pageSize;
-  const pageRows = rows.slice(start, start + pageSize);
+  // When server-paginated, rows are already just the current page so start=0
+  const start = isServerPaginated ? 0 : (page - 1) * pageSize;
+  const pageRows = isServerPaginated ? rows : rows.slice(start, start + pageSize);
 
   tbody.innerHTML = pageRows.map(i => {
     const s = State.scores[i.id];
