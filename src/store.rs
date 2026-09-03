@@ -221,17 +221,24 @@ impl Store {
     }
 
     pub async fn ensure_admin(&self, username: &str, password: &str) -> AppResult<()> {
-        if self.user_exists(username).await? {
-            return Ok(());
-        }
         let hash = crate::auth::hash_password(password)?;
-        let user = User {
-            username: username.into(),
-            password_hash: hash,
-            is_admin: true,
-            created_at: Utc::now(),
-        };
-        self.put_user(&user).await
+        if self.user_exists(username).await? {
+            // User exists — update password hash to match current ADMIN_PASSWORD env var
+            sqlx::query("UPDATE users SET password_hash = $1 WHERE username = $2")
+                .bind(&hash)
+                .bind(username)
+                .execute(&self.pool)
+                .await?;
+        } else {
+            let user = User {
+                username: username.into(),
+                password_hash: hash,
+                is_admin: true,
+                created_at: Utc::now(),
+            };
+            self.put_user(&user).await?;
+        }
+        Ok(())
     }
 
     // =================== AGENTS ===================
