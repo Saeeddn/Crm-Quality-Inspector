@@ -727,7 +727,7 @@ function renderAgents() {
   `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">کارشناسی یافت نشد</td></tr>`;
   tbody.querySelectorAll('[data-toggle-agent]').forEach(b => b.addEventListener('click', () => toggleAgent(b.dataset.toggleAgent, b.dataset.active === 'true')));
   tbody.querySelectorAll('[data-agent-report]').forEach(b => b.addEventListener('click', () => { switchTab('report'); setTimeout(() => { $('#reportAgent').value = b.dataset.agentReport; renderReport(); }, 50); }));
-  renderPagination('#agentsPager', State.agents.length, State.page.agents, Math.ceil(State.agents.length / (State.pageSize || 20)), (p) => { State.page.agents = p; renderAgents(); });
+  renderPagination('#agentsPager', State.agents.length, State.page.agents, Math.ceil(State.agents.length / State.pageSize), (p) => { State.page.agents = p; renderAgents(); });
 }
 
 async function toggleAgent(id, active) {
@@ -780,7 +780,7 @@ function renderCustomers() {
     try { await api('/customers/' + b.dataset.delCustomer, { method: 'DELETE' }); State.loaded.customers = false; await loadCustomers(); toast('حذف شد'); }
     catch (e) { toast(e.message, 'error'); }
   }));
-  renderPagination('#customersPager', State.customers.length, State.page.customers, Math.ceil(State.customers.length / (State.pageSize || 20)), (p) => { State.page.customers = p; renderCustomers(); });
+  renderPagination('#customersPager', State.customers.length, State.page.customers, Math.ceil(State.customers.length / State.pageSize), (p) => { State.page.customers = p; renderCustomers(); });
 }
 
 function openEditCustomer(id) {
@@ -1026,7 +1026,7 @@ function renderIssues() {
   }).join('') || `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">ایرادی یافت نشد</td></tr>`;
   tbody.querySelectorAll('[data-resolve-issue]').forEach(b => b.addEventListener('click', () => openResolve(b.dataset.resolveIssue)));
   const filtered = State.issues.filter(x => ($('#iStatus')?.value ? x.status === $('#iStatus').value : true) && ($('#iSeverity')?.value ? x.severity === $('#iSeverity').value : true));
-  renderPagination('#issuesPager', filtered.length, State.page.issues, Math.ceil(filtered.length / (State.pageSize || 20)), (p) => { State.page.issues = p; renderIssues(); });
+  renderPagination('#issuesPager', filtered.length, State.page.issues, Math.ceil(filtered.length / State.pageSize), (p) => { State.page.issues = p; renderIssues(); });
 }
 
 $('#iStatus')?.addEventListener('change', renderIssues);
