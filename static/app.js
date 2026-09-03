@@ -20,7 +20,9 @@ const State = {
   scoreChart: null,
   agentChart: null,
   page: { interactions: 1, issues: 1, agents: 1, customers: 1 },
-  pageSize: 20,
+  pageSize: 10,
+  interactionsTotal: 0,
+  interactionsTotalPages: 1,
 };
 
 function setToken(t, u) {
@@ -158,7 +160,9 @@ async function enterApp() {
 async function loadDashboard() {
   if (State.loaded.dashboard) { renderDashboard(); return; }
   try {
-    State.interactions = await api('/interactions');
+    const iData = await api('/interactions?page=1&limit=1000');
+    State.interactions = iData.items || [];
+    State.interactionsTotal = iData.total;
     State.loaded.interactions = true;
     State.agents = await api('/agents');
     State.loaded.agents = true;
@@ -191,9 +195,13 @@ async function loadCustomers() {
   renderCustomers();
 }
 async function loadInteractions() {
-  if (State.loaded.interactions) { renderInteractions(); return; }
-  // Skip localStorage cache to avoid stale data after restarts/seeds
-  State.interactions = await api('/interactions');
+  if (State.loaded.interactions && State.interactions.length) { renderInteractions(); return; }
+  const pageSize = State.pageSize || 10;
+  const page = State.page.interactions || 1;
+  const data = await api(`/interactions?page=${page}&limit=${pageSize}`);
+  State.interactions = data.items || [];
+  State.interactionsTotal = data.total;
+  State.interactionsTotalPages = data.total_pages;
   State.loaded.interactions = true;
   loadAllScoresLazy();
   renderInteractions();
@@ -375,23 +383,26 @@ function renderPagination(selector, total, page, totalPages, onChange) {
   const el = document.querySelector(selector);
   if (!el) return;
   if (total === 0) { el.innerHTML = '<span style="color:var(--text-muted);font-size:12px">بدون رکورد</span>'; return; }
-  const start = (page - 1) * (State.pageSize || 20) + 1;
-  const end = Math.min(page * (State.pageSize || 20), total);
+  const pageSize = State.pageSize || 10;
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
   const btn = (label, p, dis) =>
     `<button class="btn btn-sm" data-pg="${p}" ${dis ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>${label}</button>`;
   el.innerHTML =
-    `<div style="display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap;padding:12px 0">
-       <div style="color:var(--text-muted);font-size:12px">نمایش <b>${start}–${end}</b> از <b>${total}</b> رکورد</div>
-       <div style="display:flex;gap:4px;align-items:center">
+    `<div class="pager-bar">
+       <span class="pager-info">نمایش <b>${start}–${end}</b> از <b>${total}</b> رکورد (صفحه ${page} از ${totalPages})</span>
+       <div class="pager-buttons">
          ${btn('« اول', 1, page === 1)}
          ${btn('‹ قبلی', page - 1, page === 1)}
-         <span style="padding:4px 10px;background:var(--surface-2);border-radius:6px;font-size:13px">صفحه ${page} از ${totalPages}</span>
          ${btn('بعدی ›', page + 1, page === totalPages)}
          ${btn('آخر »', totalPages, page === totalPages)}
        </div>
      </div>`;
   el.querySelectorAll('button[data-pg]').forEach(b => {
-    b.addEventListener('click', () => onChange(parseInt(b.dataset.pg, 10)));
+    b.addEventListener('click', () => {
+      const p = parseInt(b.dataset.pg, 10);
+      if (p >= 1 && p <= totalPages) onChange(p);
+    });
   });
 }
 
@@ -403,7 +414,7 @@ function renderInteractions() {
   const channel = $('#fChannel')?.value || '';
   const agentId = $('#fAgent')?.value || '';
   const status = $('#fStatus')?.value || '';
-  const pageSize = State.pageSize || 20;
+  const pageSize = State.pageSize || 10;
 
   const sel = $('#fAgent');
   if (sel && sel.options.length <= 1 && State.agents.length) {
@@ -411,6 +422,7 @@ function renderInteractions() {
       .filter(a => a.active).map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
   }
 
+  // If server didn't paginate (returned all rows), do client-side filtering
   let rows = State.interactions.slice();
   if (search) rows = rows.filter(i => (i.subject + ' ' + i.transcript + ' ' + (i.tags||[]).join(' ')).toLowerCase().includes(search));
   if (channel) rows = rows.filter(i => i.channel === channel);
@@ -419,11 +431,10 @@ function renderInteractions() {
   if (status === 'unscored') rows = rows.filter(i => !State.scores[i.id]);
   rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-  // Pagination
-  const total = rows.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  if (!State.page.interactions || State.page.interactions > totalPages) State.page.interactions = 1;
-  const page = State.page.interactions;
+  // Use server-provided total if available, else compute
+  const total = State.interactionsTotal || rows.length;
+  const totalPages = State.interactionsTotalPages || Math.max(1, Math.ceil(rows.length / pageSize));
+  const page = State.page.interactions || 1;
   const start = (page - 1) * pageSize;
   const pageRows = rows.slice(start, start + pageSize);
 

@@ -285,8 +285,20 @@ pub async fn delete_customer(
 
 pub async fn list_interactions(
     State(state): State<AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> AppResult<Json<serde_json::Value>> {
-    Ok(ok(state.store.list_interactions().await?))
+    let limit: i64 = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(10);
+    let page: i64 = params.get("page").and_then(|s| s.parse().ok()).unwrap_or(1).max(1);
+    let offset = (page - 1) * limit;
+    let (interactions, total) = state.store.list_interactions_paginated(limit, offset).await?;
+    let total_pages = if limit > 0 { (total + limit - 1) / limit } else { 1 };
+    Ok(ok(json!({
+        "items": interactions,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages,
+    })))
 }
 
 pub async fn get_interaction(

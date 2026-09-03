@@ -357,7 +357,18 @@ impl Store {
     }
 
     pub async fn list_interactions(&self) -> AppResult<Vec<Interaction>> {
-        let rows = sqlx::query("SELECT id, agent_id, customer_id, channel, subject, transcript, tags, created_at, updated_at FROM interactions ORDER BY created_at DESC")
+        let (items, _total) = self.list_interactions_paginated(1000, 0).await?;
+        Ok(items)
+    }
+
+    pub async fn list_interactions_paginated(&self, limit: i64, offset: i64) -> AppResult<(Vec<Interaction>, i64)> {
+        let count_row = sqlx::query("SELECT COUNT(*) AS cnt FROM interactions")
+            .fetch_one(&self.pool).await?;
+        let total: i64 = count_row.get("cnt");
+
+        let rows = sqlx::query("SELECT id, agent_id, customer_id, channel, subject, transcript, tags, created_at, updated_at FROM interactions ORDER BY created_at DESC LIMIT $1 OFFSET $2")
+            .bind(limit)
+            .bind(offset)
             .fetch_all(&self.pool).await?;
         let mut out = Vec::with_capacity(rows.len());
         for r in rows {
@@ -374,7 +385,7 @@ impl Store {
                 updated_at: r.get("updated_at"),
             });
         }
-        Ok(out)
+        Ok((out, total))
     }
 
     // =================== RUBRICS ===================
