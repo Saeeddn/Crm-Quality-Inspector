@@ -1,0 +1,48 @@
+# docker-compose.yml — local dev / single-server deploy
+# Usage:
+#   cp .env.example .env  &&  edit ADMIN_PASSWORD and DATABASE_URL
+#   docker compose up -d --build
+#   open http://localhost:3000
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crm_quality}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-crm_quality_inspector}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    image: crm-quality-inspector:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-crm_quality}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-crm_quality_inspector}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?must be set in .env}
+      RUST_LOG: info,crm_qi=info,sqlx=warn
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 3000
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  pgdata:
+    name: crm_qi_pgdata

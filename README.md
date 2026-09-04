@@ -100,11 +100,31 @@ cargo build --release
 
 Open http://localhost:3000 in your browser.
 
-**Default login** (only when `ADMIN_PASSWORD` is not set):
-- Username: `admin`
-- Password: `ADMIN_PASS_REDACTED`
+**First-run login** is created from `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env`.
+On every subsequent start, env vars are ignored — use the **Users** tab in the UI to change passwords.
 
-⚠️ **Set `ADMIN_PASSWORD` in `.env` for production use.**
+⚠️ **No default password.** If `ADMIN_USERNAME` or `ADMIN_PASSWORD` is missing, the server refuses to start with a clear error.
+
+### 🐳 Docker (one-line deploy)
+
+```bash
+cp .env.example .env
+# Edit .env: set POSTGRES_PASSWORD and ADMIN_PASSWORD
+docker compose up -d --build
+# Wait ~30s for the first build, then open http://localhost:3000
+```
+
+This brings up PostgreSQL + the app in one command. Data persists in the `crm_qi_pgdata` named volume.
+
+**Production single-server (no Docker):**
+```bash
+cargo build --release
+# Set env vars in your shell or systemd unit
+DATABASE_URL=postgres://user:pass@127.0.0.1:5432/crm_qi \
+ADMIN_USERNAME=admin \
+ADMIN_PASSWORD='your-strong-pass' \
+./target/release/crm-quality-inspector
+```
 
 ### Configuration
 

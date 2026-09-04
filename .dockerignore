@@ -1,0 +1,19 @@
+# .dockerignore — keep build context small
+target/
+.git/
+.gitignore
+.dockerignore
+.env
+.env.local
+*.log
+node_modules/
+static/swagger-ui-bundle.js
+static/swagger-ui.css
+static/chart.js
+static/jquery.js
+# debug HTML files
+*test*.html
+*debug*.html
+README.md
+Dockerfile
+docker-compose.yml
