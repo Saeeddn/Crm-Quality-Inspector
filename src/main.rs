@@ -23,11 +23,25 @@ async fn main() {
     eprintln!("[boot] tracing initialized");
     let _ = std::io::Write::flush(&mut std::io::stderr());
 
-    // DATABASE_URL must be provided via env var in production.
-    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-        eprintln!("⚠️  DATABASE_URL not set; using insecure localhost default (DO NOT use in production)");
-        "postgres://PG_USER_REDACTED:***@127.0.0.1:5432/crm_quality_inspector".to_string()
-    });
+    // DATABASE_URL must be provided via env var. There is no insecure default —
+    // refusing to start is the only safe behavior for a public image.
+    let database_url = std::env::var("DATABASE_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| {
+            eprintln!("❌ DATABASE_URL env var is required. Refusing to start.");
+            eprintln!("   Set it in .env, your shell, or docker-compose environment.");
+            eprintln!("   Example: postgres://crm_quality:STRONG_PASSWORD@db:5432/crm_quality_inspector");
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "DATABASE_URL not set")
+        })
+        .expect("DATABASE_URL required");
+    // Basic sanity check — refuse to start with the legacy example/weak passwords.
+    if database_url.contains("PG_USER_REDACTED") || database_url.contains("ssdssd")
+        || database_url.contains("admin1234") || database_url.contains("example") {
+        eprintln!("❌ DATABASE_URL contains a placeholder/weak password. Refusing to start.");
+        eprintln!("   Generate a strong password: openssl rand -base64 24");
+        std::process::exit(2);
+    }
     eprintln!("[boot] DATABASE_URL configured, connecting...");
     let _ = std::io::Write::flush(&mut std::io::stderr());
 

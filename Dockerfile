@@ -22,11 +22,13 @@ COPY static ./static
 RUN cargo clean 2>/dev/null; \
     cargo build --release --bin crm-quality-inspector
 
-# Defaults — override with -e or compose
-ENV RUST_LOG=info,crm_qi=debug,sqlx=warn \
-    SERVER_HOST=0.0.0.0 \
-    SERVER_PORT=3000
-
+# ENV defaults intentionally NOT set. Operators MUST provide:
+#   - DATABASE_URL  (postgres connection string)
+#   - ADMIN_USERNAME
+#   - ADMIN_PASSWORD (≥12 chars, no weak substrings — see src/lib.rs)
+#   - RUST_LOG      (defaults to "info" if unset; "debug" leaks details)
+#   - SERVER_ADDR   (defaults to 0.0.0.0:3000 in the binary)
+# The app refuses to start if DATABASE_URL or ADMIN_PASSWORD are missing/weak.
 EXPOSE 3000
 
 # Healthcheck (tini + curl + /api/health must all be present)

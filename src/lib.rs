@@ -43,10 +43,26 @@ impl AppState {
             .map_err(|_| error::AppError::Config(
                 "ADMIN_PASSWORD env var is required. Set it in .env or your shell.".into()
             ))?;
-        if admin_user.trim().is_empty() || admin_pass.len() < 8 {
+        if admin_user.trim().is_empty() {
             return Err(error::AppError::Config(
-                "ADMIN_USERNAME and ADMIN_PASSWORD must be set; password ≥ 8 chars".into()
+                "ADMIN_USERNAME env var must be set and non-empty".into()
             ));
+        }
+        if admin_pass.len() < 12 {
+            return Err(error::AppError::Config(
+                "ADMIN_PASSWORD must be at least 12 characters (use `openssl rand -base64 18`)".into()
+            ));
+        }
+        // Reject well-known weak passwords so a misconfigured .env doesn't ship a
+        // guessable admin login to production.
+        let lower = admin_pass.to_ascii_lowercase();
+        for weak in &["admin", "password", "123456", "admin1234", "letmein", "qwerty"] {
+            if lower.contains(weak) {
+                return Err(error::AppError::Config(format!(
+                    "ADMIN_PASSWORD contains the weak substring '{}'. Pick a strong random password.",
+                    weak
+                )));
+            }
         }
         // First run: seed admin if no users exist.
         // Subsequent runs: keep the password synced with ADMIN_PASSWORD env var
