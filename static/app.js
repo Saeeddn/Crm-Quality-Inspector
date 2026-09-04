@@ -166,33 +166,36 @@ async function enterApp() {
 async function loadDashboard() {
   if (State.loaded.dashboard) { renderDashboard(); return; }
   try {
-    // Performance optimization: load ONLY the dashboard summary + bulk scores.
-    // Don't load full interactions/agents tables here — those are loaded on demand
-    // when the user clicks the corresponding tab. This keeps the dashboard render fast
-    // even with thousands of interactions.
-    const [dash, scoresList] = await Promise.all([
+    // Performance: load dashboard summary + bulk scores + agents in parallel.
+    // Agents is small (just names for chart labels), so we fetch it now too.
+    // Full pagination of agents/customers/issues happens on tab switch.
+    const [dash, scoresList, agentsData] = await Promise.all([
       withLoading('در حال محاسبه KPI و نمودارها...', () => api('/reports/dashboard')),
-      api('/scores')
+      api('/scores'),
+      api('/agents?page=1&limit=1000')
     ]);
     State.dashboard = dash;
     // Bulk-load all scores into State.scores by interaction_id (used by trend/agent charts)
     State.scores = {};
     (scoresList || []).forEach(s => { if (s && s.interaction_id) State.scores[s.interaction_id] = s; });
+    // Populate agents for chart labels
+    State.agents = (agentsData && agentsData.items) || [];
+    State.agentsTotal = (agentsData && agentsData.total) || State.agents.length;
+    State.agentsTotalPages = (agentsData && agentsData.total_pages) || 1;
+    State.loaded.agents = true;
     State.loaded.dashboard = true;
     cacheSet('dashboard', State.dashboard);
-    // Render dashboard immediately — score+agent charts now have data
+    cacheSet('agents', State.agents);
+    // Render dashboard immediately — all 3 charts have data
     renderDashboard();
-    // In the background, load the lightweight pages we need for interactions tab:
-    // - First page of interactions (so the tab doesn't appear empty if user clicks it)
-    // - First page of agents (so chart labels resolve)
-    // Both are skipped if the user has already navigated to a tab.
+    // In the background, load the lightweight pages we need for interactions tab
     setTimeout(async () => {
       if (!State.loaded.interactions) {
         await loadInteractions();
-        // loadInteractions already calls loadAllScoresLazy, but State.scores is already
-        // populated from /scores — loadAllScoresLazy will be a quick no-op refresh.
       }
-      if (!State.loaded.agents) await loadAgents();
+      if (!State.loaded.customers) {
+        // customers needed when tab is opened
+      }
     }, 100);
   } catch (e) {
     toast('خطا در بارگذاری داشبورد: ' + e.message, 'error');

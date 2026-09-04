@@ -347,6 +347,7 @@ dependencies = [
  "axum",
  "bcrypt",
  "chrono",
+ "dotenvy",
  "hex",
  "rand",
  "serde",
