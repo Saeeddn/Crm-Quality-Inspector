@@ -1,58 +1,38 @@
 # syntax=docker/dockerfile:1.7
-# Two-stage build for crm-quality-inspector (Rust + axum)
-# Stage 1: build static binary
-FROM rust:1.81-bookworm AS builder
+# Single-stage build for crm-quality-inspector (Rust + axum).
+# Single-stage because multi-stage layered caches were producing stale
+# binary MD5s on rebuild (cargo incremental cache reuse). This one liner
+# always rebuilds fresh and works reliably.
+FROM rust:1.88-bookworm
 WORKDIR /app
 
-# Cache deps separately from source for faster incremental builds
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs && \
-    echo "" > src/lib.rs && \
-    cargo build --release && \
-    rm -rf src
-
-# Now copy real source and rebuild
-COPY . .
-# Use a dummy main binary target name to avoid the build script collision
-RUN cargo build --release --bin crm-quality-inspector
-
-# Stage 2: minimal runtime
-FROM debian:bookworm-slim AS runtime
-
-# Install runtime deps: PostgreSQL client, ca-certificates, tini for signal handling
+# Install libpq-dev for sqlx build, plus runtime deps (libpq5 + tini + curl
+# for HEALTHCHECK). We build AND run in the same image — it's larger
+# (~2.5GB) but reliable and matches the "systemd service" workflow.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      libpq5 ca-certificates tini curl \
+      libpq-dev libpq5 ca-certificates tini curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN groupadd -r crm && useradd -r -g crm -d /app -s /sbin/nologin crm
+# Copy source
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY static ./static
 
-WORKDIR /app
-
-# Copy the binary
-COPY --from=builder /app/target/release/crm-quality-inspector /app/crm-quality-inspector
-
-# Copy static assets (the Rust binary includes them via include_str!, but we
-# keep them in case you want to mount a custom static dir)
-COPY --from=builder /app/static /app/static
-
-# Data directory for SQLite (if used) or any local state
-RUN mkdir -p /app/data && chown -R crm:crm /app
-
-USER crm
+# Build fresh
+RUN cargo clean 2>/dev/null; \
+    cargo build --release --bin crm-quality-inspector
 
 # Defaults — override with -e or compose
 ENV RUST_LOG=info,crm_qi=debug,sqlx=warn \
     SERVER_HOST=0.0.0.0 \
-    SERVER_PORT=3000 \
-    ADMIN_USERNAME=admin \
-    ADMIN_PASSWORD="" \
-    DATABASE_URL=""
+    SERVER_PORT=3000
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+# Healthcheck (tini + curl + /api/health must all be present)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:3000/api/health || exit 1
 
+# tini reaps zombies and forwards signals
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["/app/crm-quality-inspector"]
+CMD ["/app/target/release/crm-quality-inspector"]
