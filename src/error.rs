@@ -20,6 +20,9 @@ pub enum AppError {
     #[error("validation: {0}")]
     Validation(String),
 
+    #[error("config: {0}")]
+    Config(String),
+
     #[error("auth: {0}")]
     Auth(String),
 
@@ -41,6 +44,7 @@ impl AppError {
             AppError::Auth(_) => StatusCode::UNAUTHORIZED,
             AppError::Forbidden(_) => StatusCode::FORBIDDEN,
             AppError::Conflict(_) => StatusCode::CONFLICT,
+            AppError::Config(_) => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -51,6 +55,7 @@ impl AppError {
             AppError::Auth(_) => "unauthorized",
             AppError::Forbidden(_) => "forbidden",
             AppError::Conflict(_) => "conflict",
+            AppError::Config(_) => "config",
             _ => "internal",
         }
     }

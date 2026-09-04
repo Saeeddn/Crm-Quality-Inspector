@@ -30,14 +30,33 @@ impl AppState {
     }
 
     async fn seed_defaults(&self) -> Result<(), error::AppError> {
-        // Admin credentials from env vars (with safe defaults for first-run dev).
-        // In production, set ADMIN_USERNAME and ADMIN_PASSWORD — never commit them.
-        let admin_user = std::env::var("ADMIN_USERNAME").unwrap_or_else(|_| "admin".to_string());
-        let admin_pass = std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| {
-            eprintln!("⚠️  ADMIN_PASSWORD not set; using insecure default 'ADMIN_PASS_REDACTED' (DO NOT use in production)");
-            "ADMIN_PASS_REDACTED".to_string()
-        });
-        self.store.ensure_admin(&admin_user, &admin_pass).await?;
+        // Admin credentials from env vars. There is NO default password for security:
+        // if neither ADMIN_USERNAME nor ADMIN_PASSWORD is set, the server refuses to start.
+        // The first start creates the admin user from these env vars; subsequent starts
+        // leave the user alone (use the API to change the password, which then diverges
+        // from the env var on purpose).
+        let admin_user = std::env::var("ADMIN_USERNAME")
+            .map_err(|_| error::AppError::Config(
+                "ADMIN_USERNAME env var is required. Set it in .env or your shell.".into()
+            ))?;
+        let admin_pass = std::env::var("ADMIN_PASSWORD")
+            .map_err(|_| error::AppError::Config(
+                "ADMIN_PASSWORD env var is required. Set it in .env or your shell.".into()
+            ))?;
+        if admin_user.trim().is_empty() || admin_pass.len() < 8 {
+            return Err(error::AppError::Config(
+                "ADMIN_USERNAME and ADMIN_PASSWORD must be set; password ≥ 8 chars".into()
+            ));
+        }
+        // Only seed admin if no users exist (first run). After that, the UI owns
+        // user management — changing ADMIN_PASSWORD in .env will NOT overwrite
+        // a password that was changed via the API.
+        if self.store.list_users().await?.is_empty() {
+            self.store.ensure_admin(&admin_user, &admin_pass).await?;
+        } else {
+            eprintln!("✓ Users already exist; ADMIN_USERNAME/ADMIN_PASSWORD env vars are ignored.");
+            eprintln!("  Use the web UI (Users tab) to change passwords.");
+        }
         self.store.ensure_default_rubric().await?;
         if std::env::var("FORCE_SEED").ok().as_deref() == Some("1") {
             // Wipe business data before re-seeding demo. Users and rubrics

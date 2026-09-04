@@ -64,6 +64,15 @@ async function api(url, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   if (State.token) headers['Authorization'] = `Bearer ${State.token}`;
   const r = await fetch('/api' + url, { ...opts, headers });
+  // Handle 401 globally: token expired or invalid → force re-login with a toast
+  if (r.status === 401) {
+    // Avoid loops: only redirect if we still think we're logged in
+    if (State.token) {
+      const reason = url === '/auth/login' ? 'نام کاربری یا رمز عبور اشتباه است' : 'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.';
+      logout(reason);
+    }
+    throw new Error('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
+  }
   const text = await r.text();
   if (!text) {
     if (r.ok) return null;
@@ -144,7 +153,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
   }
 });
 
-function logout() {
+function logout(message) {
   setToken(null, null);
   State.agents = []; State.customers = []; State.interactions = [];
   State.rubrics = []; State.scores = {}; State.issues = [];
@@ -152,6 +161,10 @@ function logout() {
   Object.keys(State.loaded).forEach(k => State.loaded[k] = false);
   $('#loginScreen').classList.remove('hidden');
   $('#appShell').classList.add('hidden');
+  // Show a clear message about WHY the user was logged out
+  if (message) {
+    setTimeout(() => toast(message, 'warning'), 100);
+  }
 }
 
 // ============ App ============
@@ -169,10 +182,11 @@ async function loadDashboard() {
     // Performance: load dashboard summary + bulk scores + agents in parallel.
     // Agents is small (just names for chart labels), so we fetch it now too.
     // Full pagination of agents/customers/issues happens on tab switch.
-    const [dash, scoresList, agentsData] = await Promise.all([
+    const [dash, scoresList, agentsData, interactionsData] = await Promise.all([
       withLoading('در حال محاسبه KPI و نمودارها...', () => api('/reports/dashboard')),
       api('/scores'),
-      api('/agents?page=1&limit=1000')
+      api('/agents?page=1&limit=1000'),
+      api('/interactions?page=1&limit=1000')  // load for agent chart lookups
     ]);
     State.dashboard = dash;
     // Bulk-load all scores into State.scores by interaction_id (used by trend/agent charts)
@@ -183,18 +197,20 @@ async function loadDashboard() {
     State.agentsTotal = (agentsData && agentsData.total) || State.agents.length;
     State.agentsTotalPages = (agentsData && agentsData.total_pages) || 1;
     State.loaded.agents = true;
+    // Populate interactions so renderAgentChart can find them
+    State.interactions = (interactionsData && interactionsData.items) || [];
+    State.interactionsTotal = (interactionsData && interactionsData.total) || State.interactions.length;
+    State.interactionsTotalPages = (interactionsData && interactionsData.total_pages) || 1;
+    State.loaded.interactions = true;
     State.loaded.dashboard = true;
     cacheSet('dashboard', State.dashboard);
     cacheSet('agents', State.agents);
     // Render dashboard immediately — all 3 charts have data
     renderDashboard();
-    // In the background, load the lightweight pages we need for interactions tab
+    // Background: refresh interactions when user clicks the tab (loads page 1 of paginated view)
     setTimeout(async () => {
       if (!State.loaded.interactions) {
         await loadInteractions();
-      }
-      if (!State.loaded.customers) {
-        // customers needed when tab is opened
       }
     }, 100);
   } catch (e) {
