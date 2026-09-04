@@ -43,19 +43,38 @@ impl AppState {
             .map_err(|_| error::AppError::Config(
                 "ADMIN_PASSWORD env var is required. Set it in .env or your shell.".into()
             ))?;
-        if admin_user.trim().is_empty() || admin_pass.len() < 8 {
+        if admin_user.trim().is_empty() {
             return Err(error::AppError::Config(
-                "ADMIN_USERNAME and ADMIN_PASSWORD must be set; password ≥ 8 chars".into()
+                "ADMIN_USERNAME env var must be set and non-empty".into()
             ));
         }
-        // Only seed admin if no users exist (first run). After that, the UI owns
-        // user management — changing ADMIN_PASSWORD in .env will NOT overwrite
-        // a password that was changed via the API.
+        if admin_pass.len() < 12 {
+            return Err(error::AppError::Config(
+                "ADMIN_PASSWORD must be at least 12 characters (use `openssl rand -base64 18`)".into()
+            ));
+        }
+        // Reject well-known weak passwords so a misconfigured .env doesn't ship a
+        // guessable admin login to production.
+        let lower = admin_pass.to_ascii_lowercase();
+        for weak in &["admin", "password", "123456", "admin1234", "letmein", "qwerty"] {
+            if lower.contains(weak) {
+                return Err(error::AppError::Config(format!(
+                    "ADMIN_PASSWORD contains the weak substring '{}'. Pick a strong random password.",
+                    weak
+                )));
+            }
+        }
+        // First run: seed admin if no users exist.
+        // Subsequent runs: keep the password synced with ADMIN_PASSWORD env var
+        // so .env remains the single source of truth for fresh deploys.
+        // The UI can still change passwords; if you then restart with a different
+        // ADMIN_PASSWORD in .env, that new value will take effect again.
         if self.store.list_users().await?.is_empty() {
             self.store.ensure_admin(&admin_user, &admin_pass).await?;
         } else {
-            eprintln!("✓ Users already exist; ADMIN_USERNAME/ADMIN_PASSWORD env vars are ignored.");
-            eprintln!("  Use the web UI (Users tab) to change passwords.");
+            self.store.ensure_admin(&admin_user, &admin_pass).await?;
+            eprintln!("✓ Admin password synced from ADMIN_PASSWORD env var.");
+            eprintln!("  (Use the web UI Users tab to change it; the new value will stick on this server until .env is edited again.)");
         }
         self.store.ensure_default_rubric().await?;
         if std::env::var("FORCE_SEED").ok().as_deref() == Some("1") {
