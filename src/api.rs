@@ -25,6 +25,8 @@ pub fn router() -> Router<AppState> {
         .route("/agents", get(list_agents).post(create_agent))
         .route("/agents/:id", get(get_agent).patch(patch_agent).delete(delete_agent))
         .route("/customers", get(list_customers).post(create_customer))
+        .route("/customers/risk", get(list_customers_risk))
+        .route("/customers/:id/risk", get(get_customer_risk))
         .route("/customers/:id", get(get_customer).patch(patch_customer).delete(delete_customer))
         .route("/interactions", get(list_interactions).post(create_interaction))
         .route("/interactions/:id", get(get_interaction))
@@ -282,6 +284,26 @@ pub async fn get_customer(
         .await?
         .ok_or_else(|| AppError::NotFound("مشتری یافت نشد".into()))?;
     Ok(ok(c))
+}
+
+pub async fn list_customers_risk(
+    State(state): State<AppState>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    Ok(ok(s.customer_risk_scores().await?))
+}
+
+pub async fn get_customer_risk(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    let s = Service::new(&state.store);
+    let all = s.customer_risk_scores().await?;
+    let found = all
+        .into_iter()
+        .find(|c| c.customer_id == id)
+        .ok_or_else(|| AppError::NotFound("این مشتری یافت نشد یا تعاملی ندارد".into()))?;
+    Ok(ok(found))
 }
 
 pub async fn create_customer(
