@@ -174,6 +174,9 @@ async function enterApp() {
   $('#userBadge').textContent = State.user?.username || '';
   await loadDashboard();
   switchTab('dashboard');
+  // Eagerly pre-fetch the customer risk page so the first tab switch
+  // shows data immediately instead of a loading spinner.
+  loadCustomerRisk(true);
 }
 
 async function loadDashboard() {
@@ -305,6 +308,80 @@ async function loadRecommendations() {
   renderRecommendations();
 }
 
+// ============ Customer Risk Score ============
+async function loadCustomerRisk(force = false) {
+  if (!force && State.loaded.risk) { renderCustomerRisk(); return; }
+  State.customerRisk = await withLoading('در حال محاسبه ریسک مشتریان...', () => api('/customers/risk'));
+  State.loaded.risk = true;
+  renderCustomerRisk();
+}
+
+function renderCustomerRisk() {
+  const list = State.customerRisk || [];
+  const high = list.filter(c => c.level === 'بالا').length;
+  const med  = list.filter(c => c.level === 'متوسط').length;
+  const low  = list.filter(c => c.level === 'پایین').length;
+
+  // KPIs (matches dashboard's .kpi/.kpi-value style)
+  $('#riskKpiGrid').innerHTML = `
+    <div class="kpi">
+      <div class="kpi-label">ریسک بالا</div>
+      <div class="kpi-value kpi-red">${high}</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">نیاز به تماس فوری</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">ریسک متوسط</div>
+      <div class="kpi-value kpi-amber">${med}</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">نیاز به پیگیری</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">ریسک پایین</div>
+      <div class="kpi-value kpi-green">${low}</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">نظارت عادی</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">کل مشتریان</div>
+      <div class="kpi-value">${list.length}</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">با Risk Score</div>
+    </div>
+  `;
+
+  // Table
+  const tbody = $('#riskTable tbody');
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">داده‌ای موجود نیست</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(c => {
+    const score = (c.risk_score || 0).toFixed(1);
+    const avg = c.avg_score != null ? c.avg_score.toFixed(1) : '—';
+    const lastDate = c.last_interaction_at
+      ? new Date(c.last_interaction_at).toLocaleDateString('fa-IR')
+      : '—';
+    const factors = (c.factors || []).slice(0, 2).map(f =>
+      `<div class="factor-chip" title="${esc(f.reason)}">${esc(f.label)} +${f.points.toFixed(0)}</div>`
+    ).join('');
+    const factorDetail = (c.factors || []).length > 2
+      ? `<span class="factor-chip" style="background:var(--surface-2)">+${c.factors.length - 2} بیشتر</span>`
+      : '';
+    const levelClass = c.level === 'بالا' ? 'risk-high' : c.level === 'متوسط' ? 'risk-med' : 'risk-low';
+    const actionClass = c.level === 'بالا' ? 'badge-red' : c.level === 'متوسط' ? 'badge-amber' : 'badge-green';
+    return `
+      <tr>
+        <td><span class="risk-dot ${levelClass}" title="${score}"></span></td>
+        <td><strong>${esc(c.customer_name)}</strong><br><span style="font-size:11px;color:var(--text-muted)">${lastDate}</span></td>
+        <td><strong style="font-size:18px;color:var(--${c.level === 'بالا' ? 'red' : c.level === 'متوسط' ? 'amber' : 'green'})">${score}</strong></td>
+        <td><span class="badge ${actionClass}">${esc(c.level)}</span></td>
+        <td>${c.scored_interactions || 0} / ${c.total_interactions || 0}</td>
+        <td>${c.open_issues > 0 ? `<span class="badge badge-red">${c.open_issues}</span>` : '—'}</td>
+        <td>${avg}</td>
+        <td>${esc(c.recommended_action)}</td>
+        <td><div style="display:flex;flex-wrap:wrap;gap:4px">${factors}${factorDetail}</div></td>
+      </tr>
+    `;
+  }).join('');
+}
+
 function switchTab(tab) {
   $$('.page').forEach(p => p.classList.add('hidden'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
@@ -312,7 +389,7 @@ function switchTab(tab) {
   $(`.nav-item[data-tab="${tab}"]`)?.classList.add('active');
   $('#topbarTitle').textContent = {
     dashboard: 'داشبورد', interactions: 'تعاملات', agents: 'کارشناسان',
-    customers: 'مشتریان', recommendations: 'پیشنهادهای QA', issues: 'ایرادات',
+    customers: 'مشتریان', risk: 'سلامت مشتریان', recommendations: 'پیشنهادهای QA', issues: 'ایرادات',
     rubrics: 'پارامترهای اندازهگیری', report: 'گزارش کارشناس',
     users: 'مدیریت کاربران',
   }[tab] || tab;
@@ -323,6 +400,7 @@ function switchTab(tab) {
   else if (tab === 'issues') loadIssues();
   else if (tab === 'rubrics') loadKpis();
   else if (tab === 'recommendations') loadRecommendations();
+  else if (tab === 'risk') loadCustomerRisk();
   else if (tab === 'report') loadAgents().then(populateReportAgents);
   else if (tab === 'users') loadUsers();
 }

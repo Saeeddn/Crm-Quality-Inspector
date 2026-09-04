@@ -306,6 +306,42 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
 }
 .kpi-card:hover { border-color: var(--primary); transform: translateY(-1px); }
 .kpi-card.kpi-inactive { opacity: 0.5; }
+
+/* Risk Score colors (used in both dashboard and risk page) */
+.kpi-value.kpi-red   { color: #ef4444; }
+.kpi-value.kpi-amber { color: #f59e0b; }
+.kpi-value.kpi-green { color: #10b981; }
+
+/* Risk dot indicator */
+.risk-dot {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.risk-dot.risk-high { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.15); }
+.risk-dot.risk-med  { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.15); }
+.risk-dot.risk-low  { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.15); }
+
+/* Factor chip (small tag) */
+.factor-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.factor-chip.risk-high { color: #ef4444; border-color: rgba(239,68,68,.4); background: rgba(239,68,68,.08); }
+.factor-chip.risk-med  { color: #f59e0b; border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.08); }
+
+/* Badges for level/action */
+.badge-red   { background: rgba(239,68,68,.12);  color: #ef4444; }
+.badge-amber { background: rgba(245,158,11,.12); color: #f59e0b; }
+.badge-green { background: rgba(16,185,129,.12); color: #10b981; }
+
 .kpi-card-header {
   display: flex; justify-content: space-between; align-items: flex-start;
   margin-bottom: 10px;
