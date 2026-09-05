@@ -60,10 +60,12 @@ jobs:
         continue-on-error: true  # don't block on lints; surface as a warning
 
   # ── Integration tests ───────────────────────────────────────────
-  # Requires a live Postgres. Uses GitHub Actions services to spin one up
-  # alongside the test runner. Runs in parallel with the build job.
+  # Requires a live Postgres + a running server. Spins up Postgres via
+  # the service container, builds the server binary, starts it in the
+  # background, waits for /api/health to respond, then runs the suite
+  # against it. The server is killed in the always() cleanup step.
   integration:
-    name: Integration tests (Postgres)
+    name: Integration tests (Postgres + server)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -80,10 +82,14 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     env:
-      DATABASE_URL: postgres://crm_test:crm_test_pass@localhost:5432/crm_test
-      ADMIN_USERNAME: ci_admin
-      ADMIN_PASSWORD: CI-Strong-Password-2026
+      DATABASE_URL: postgres://crm_test:***@localhost:5432/crm_test
+      # These MUST match the credentials in tests/integration_test.rs —
+      # the smoke tests hardcode "admin"/"NewSecretPass789" for login.
+      # If you change one, change both.
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: NewSecretPass789
       RUST_LOG: warn
+      SERVER_ADDR: 127.0.0.1:3000
     steps:
       - uses: actions/checkout@v4
 
@@ -117,19 +123,59 @@ jobs:
           echo "Postgres never became ready"
           exit 1
 
-      - name: Build
-        run: cargo build --verbose
+      - name: Build release binary
+        # Integration tests hit the HTTP server on 127.0.0.1:3000, so we
+        # need a runnable binary — not just a `cargo test` artifact.
+        run: cargo build --release --verbose --bin crm-quality-inspector
+
+      - name: Start server in background
+        # The integration tests in tests/integration_test.rs assume the
+        # server is already running (they make HTTP requests to
+        # 127.0.0.1:3000). Start it here, capture logs, and kill it in
+        # the always() cleanup step regardless of test outcome.
+        run: |
+          set -m  # job control so we can kill the process group below
+          ./target/release/crm-quality-inspector > /tmp/server.log 2>&1 &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          echo "Server started with PID $SERVER_PID"
+
+      - name: Wait for server to be ready
+        # Poll /api/health until the server responds 200. Max ~30s.
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
+              echo "Server ready at attempt $i"
+              curl -s http://127.0.0.1:3000/api/health
+              echo ""
+              exit 0
+            fi
+            echo "Waiting for server ($i/30)..."
+            sleep 1
+          done
+          echo "::error::Server failed to become ready in 30s"
+          echo "--- last 100 lines of server.log ---"
+          tail -n 100 /tmp/server.log
+          exit 1
 
       - name: Run integration tests
-        # --test-threads=1 because tests share a single DB; some create
-        # resources that others depend on.
+        # --test-threads=1 because all tests share one DB and one server.
         run: cargo test --test integration_test --verbose -- --test-threads=1
 
-      - name: Run smoke tests (the ones in integration_test.rs marked `smoke_*`)
-        # Smoke tests need a running server, so they live in integration_test.rs.
-        # Filter to just `smoke_*` so a failing smoke doesn't block on other
-        # integration test failures (those have separate handling above).
-        run: cargo test --test integration_test smoke --verbose -- --test-threads=1
+      - name: Stop server (always)
+        # Run on both success and failure so the runner cleans up.
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+            echo "Stopping server PID $SERVER_PID"
+            kill -TERM -- -"$SERVER_PID" 2>/dev/null || kill -TERM "$SERVER_PID" 2>/dev/null || true
+            sleep 1
+            kill -KILL -- -"$SERVER_PID" 2>/dev/null || kill -KILL "$SERVER_PID" 2>/dev/null || true
+          else
+            echo "Server already stopped"
+          fi
+          echo "--- server.log tail (last 50 lines) ---"
+          tail -n 50 /tmp/server.log || true
 
   # ── Docker build ────────────────────────────────────────────────
   # Validates that the multi-stage Dockerfile actually builds. This catches
