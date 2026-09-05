@@ -60,21 +60,16 @@ jobs:
         continue-on-error: true
 
   # ── Integration tests ───────────────────────────────────────────
-  # Requires a live Postgres + a running server. We don't use a service
-  # container for Postgres because env-var propagation to the entrypoint
-  # was unreliable. We start Postgres ourselves with `docker run`, then
-  # build the server binary, start it in the background, wait for
-  # /api/health, and run the suite. The server is killed in the
-  # always() cleanup step.
+  # Requires a live Postgres + a running server. We install Postgres
+  # directly on the runner (via apt) instead of using a service
+  # container — service containers and `docker run` Postgres both had
+  # flaky password-auth behaviour (psql auth'd fine, but the Rust
+  # sqlx client didn't). Installing + configuring Postgres ourselves
+  # gives us predictable md5 auth on TCP.
   integration:
     name: Integration tests (Postgres + server)
     runs-on: ubuntu-latest
     env:
-      # Use 127.0.0.1 (not localhost) so both psql and the Rust server
-      # connect over TCP. psql on some runners resolves localhost to the
-      # Unix socket, where pg_hba is 'trust' by default — so a passing
-      # psql check on localhost did not actually exercise the same
-      # auth path the server would use.
       DATABASE_URL: postgres://crm_test:***@127.0.0.1:5432/crm_test
       # These MUST match the credentials in tests/integration_test.rs —
       # the smoke tests hardcode "admin"/"NewSecretPass789" for login.
@@ -85,14 +80,21 @@ jobs:
       POSTGRES_USER: crm_test
       POSTGRES_PASSWORD: crm_test_pass
       POSTGRES_DB: crm_test
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: crm_test
+      PGPASSWORD: crm_test_pass
+      PGDATABASE: crm_test
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install libpq (build dep for sqlx) + postgresql-client
-        run: sudo apt-get update && sudo apt-get install -y libpq-dev postgresql-client
+      - name: Install libpq + Postgres + postgresql-client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev postgresql postgresql-client
 
       - name: Cache cargo registry and build artifacts
         uses: actions/cache@v4
@@ -105,33 +107,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-int-
 
-      - name: Start Postgres
-        run: |
-          docker run -d --name ci-postgres \
-            -e POSTGRES_USER="$POSTGRES_USER" \
-            -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-            -e POSTGRES_DB="$POSTGRES_DB" \
-            -p 5432:5432 \
-            postgres:16-alpine
-          echo "Postgres container started"
+      - name: Start Postgres and create test user/db
+        run: bash scripts/ci-start-postgres.sh
 
-      - name: Wait for Postgres to be ready and verify auth over TCP
+      - name: Verify Postgres auth over TCP
         run: |
-          for i in $(seq 1 30); do
-            if pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
-              if PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1" > /dev/null 2>&1; then
-                echo "Postgres TCP auth verified at attempt $i"
-                exit 0
-              else
-                echo "psql over TCP failed at attempt $i:"
-                PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1" 2>&1 | head -5 || true
-              fi
+          for i in $(seq 1 15); do
+            if PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1" > /dev/null 2>&1; then
+              echo "Postgres TCP auth verified at attempt $i"
+              exit 0
             fi
-            echo "Waiting for Postgres (attempt $i/30)..."
+            echo "Waiting for Postgres TCP auth ($i/15)..."
             sleep 1
           done
-          echo "::error::Postgres did not become ready or auth failed"
-          docker logs ci-postgres || true
+          echo "::error::Postgres TCP auth never succeeded"
           exit 1
 
       - name: Build release binary
@@ -189,10 +178,6 @@ jobs:
           fi
           echo "--- server.log tail (last 50 lines) ---"
           tail -n 50 /tmp/server.log || true
-
-      - name: Stop Postgres (always)
-        if: always()
-        run: docker rm -f ci-postgres 2>/dev/null || true
 
   # ── Docker build ────────────────────────────────────────────────
   # Validates that the multi-stage Dockerfile actually builds. This catches
