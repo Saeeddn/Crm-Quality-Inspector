@@ -133,8 +133,21 @@ jobs:
         # server is already running (they make HTTP requests to
         # 127.0.0.1:3000). Start it here, capture logs, and kill it in
         # the always() cleanup step regardless of test outcome.
+        #
+        # We move .env aside because src/main.rs auto-loads it via
+        # dotenvy, and a stale .env (with different DATABASE_URL/admin
+        # credentials) would silently override the CI env vars set in
+        # this job.
         run: |
-          set -m  # job control so we can kill the process group below
+          set -m
+          if [ -f .env ]; then
+            echo "Moving .env aside so it doesn't override CI env vars"
+            mv .env .env.ci-bak
+          fi
+          echo "--- effective server env ---"
+          echo "DATABASE_URL=$DATABASE_URL"
+          echo "ADMIN_USERNAME=$ADMIN_USERNAME"
+          echo "SERVER_ADDR=$SERVER_ADDR"
           ./target/release/crm-quality-inspector > /tmp/server.log 2>&1 &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
