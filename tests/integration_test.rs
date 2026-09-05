@@ -133,6 +133,129 @@ async fn smoke_swagger_ui_endpoint_exists() {
     assert!(status == 200 || status == 301 || status == 302, "swagger-ui should be reachable, got {}", status);
 }
 
+// -------------------- Customer Risk Score --------------------
+
+#[tokio::test]
+async fn risk_list_endpoint_returns_sorted_customers() {
+    // Login
+    let body = r#"{"username":"admin","password":"NewSecretPass789"}"#;
+    let (_, login_resp) = http_post("/api/auth/login", body, None).await;
+    let token = extract_token(&login_resp).expect("extract token");
+
+    // GET /api/customers/risk
+    let (status, body) = http_get("/api/customers/risk", Some(&token)).await;
+    assert_eq!(status, 200, "risk list must be 200, body={}", body);
+
+    // Parse the data array
+    let value: serde_json::Value = serde_json::from_str(&body)
+        .expect("response must be valid JSON");
+    let data = value.get("data").expect("response has data field");
+    let arr = data.as_array().expect("data must be an array");
+
+    assert!(!arr.is_empty(), "should have at least one customer");
+    assert!(arr.len() >= 1);
+
+    // Verify each item has the expected fields
+    let first = &arr[0];
+    assert!(first.get("customer_id").is_some(), "must have customer_id");
+    assert!(first.get("customer_name").is_some(), "must have customer_name");
+    assert!(first.get("risk_score").is_some(), "must have risk_score");
+    assert!(first.get("level").is_some(), "must have level");
+    assert!(first.get("factors").is_some(), "must have factors array");
+    assert!(first.get("recommended_action").is_some(), "must have recommended_action");
+    assert!(first.get("open_issues").is_some(), "must have open_issues");
+    assert!(first.get("total_interactions").is_some(), "must have total_interactions");
+
+    // Verify sorted descending by risk_score
+    let mut prev_score = f64::MAX;
+    for item in arr {
+        let score = item.get("risk_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        assert!(score <= prev_score, "risk scores must be sorted descending: {} > {}", score, prev_score);
+        prev_score = score;
+    }
+}
+
+#[tokio::test]
+async fn risk_level_thresholds_are_consistent() {
+    // Login
+    let body = r#"{"username":"admin","password":"NewSecretPass789"}"#;
+    let (_, login_resp) = http_post("/api/auth/login", body, None).await;
+    let token = extract_token(&login_resp).expect("extract token");
+
+    let (status, body) = http_get("/api/customers/risk", Some(&token)).await;
+    assert_eq!(status, 200);
+
+    let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let arr = value.get("data").and_then(|v| v.as_array()).unwrap();
+
+    // Each customer's level must match its risk_score threshold
+    for item in arr {
+        let score = item.get("risk_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let level = item.get("level").and_then(|v| v.as_str()).unwrap_or("");
+        let action = item.get("recommended_action").and_then(|v| v.as_str()).unwrap_or("");
+
+        let expected_level = if score >= 70.0 { "بالا" }
+            else if score >= 40.0 { "متوسط" }
+            else { "پایین" };
+        let expected_action = match expected_level {
+            "بالا" => "تماس فوری",
+            "متوسط" => "پیگیری",
+            _ => "نظارت",
+        };
+
+        assert_eq!(level, expected_level, "level mismatch for score {}: got {}", score, level);
+        assert_eq!(action, expected_action, "action mismatch for level {}: got {}", level, action);
+    }
+}
+
+#[tokio::test]
+async fn risk_single_customer_endpoint_returns_detail() {
+    // Login
+    let body = r#"{"username":"admin","password":"NewSecretPass789"}"#;
+    let (_, login_resp) = http_post("/api/auth/login", body, None).await;
+    let token = extract_token(&login_resp).expect("extract token");
+
+    // First get any customer id (paginated wrapper)
+    let (status, body) = http_get("/api/customers", Some(&token)).await;
+    assert_eq!(status, 200);
+    let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let customers = value.get("data")
+        .and_then(|d| d.get("items"))
+        .and_then(|v| v.as_array())
+        .expect("customers response must have data.items array");
+    assert!(!customers.is_empty(), "must have at least one customer");
+    let cust_id = customers[0].get("id").and_then(|v| v.as_str()).unwrap();
+
+    // Now get risk for that customer
+    let path = format!("/api/customers/{}/risk", cust_id);
+    let (status, body) = http_get(&path, Some(&token)).await;
+    assert_eq!(status, 200, "single customer risk must be 200, body={}", body);
+
+    let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let data = value.get("data").expect("response has data");
+    assert_eq!(data.get("customer_id").and_then(|v| v.as_str()).unwrap(), cust_id);
+    assert!(data.get("risk_score").is_some());
+}
+
+#[tokio::test]
+async fn risk_endpoint_requires_auth() {
+    // No token → should be 401
+    let (status, _) = http_get("/api/customers/risk", None).await;
+    assert_eq!(status, 401, "risk endpoint must require auth");
+}
+
+#[tokio::test]
+async fn risk_endpoint_rejects_invalid_customer_id() {
+    // Login
+    let body = r#"{"username":"admin","password":"NewSecretPass789"}"#;
+    let (_, login_resp) = http_post("/api/auth/login", body, None).await;
+    let token = extract_token(&login_resp).expect("extract token");
+
+    // Get risk for non-existent customer
+    let (status, _) = http_get("/api/customers/does-not-exist-xyz/risk", Some(&token)).await;
+    assert_eq!(status, 404, "non-existent customer should return 404, got {}", status);
+}
+
 // -------------------- Helper --------------------
 
 fn extract_token(login_response: &str) -> Option<String> {

@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  push:
+    branches: [master, dev, v1.0]
+  pull_request:
+    branches: [master, dev, v1.0]
+
+# Cancel in-progress runs for the same branch when a new push lands
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── Build & unit tests ──────────────────────────────────────────
+  # Fast feedback: catches compilation errors and pure-logic bugs without
+  # needing a database. Runs on every push.
+  build-and-unit:
+    name: Build + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build (debug)
+        run: cargo build --verbose
+
+      - name: Build (release)
+        run: cargo build --release --verbose
+
+      - name: Run unit tests (no DB required)
+        run: cargo test --test unit_test --verbose
+
+      - name: Run lib tests
+        run: cargo test --lib --verbose
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+        continue-on-error: true  # don't block on style; surface as a warning
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+        continue-on-error: true  # don't block on lints; surface as a warning
+
+  # ── Integration tests ───────────────────────────────────────────
+  # Requires a live Postgres. Uses GitHub Actions services to spin one up
+  # alongside the test runner. Runs in parallel with the build job.
+  integration:
+    name: Integration tests (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: crm_test
+          POSTGRES_PASSWORD: crm_test_pass
+          POSTGRES_DB: crm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crm_test -d crm_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://crm_test:crm_test_pass@localhost:5432/crm_test
+      ADMIN_USERNAME: ci_admin
+      ADMIN_PASSWORD: CI-Strong-Password-2026
+      RUST_LOG: warn
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install libpq (build dep for sqlx)
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+
+      - name: Cache cargo registry and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-int-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-int-
+
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -U crm_test -d crm_test; then
+              echo "Postgres ready"
+              exit 0
+            fi
+            echo "Waiting for postgres ($i/30)..."
+            sleep 1
+          done
+          echo "Postgres never became ready"
+          exit 1
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run integration tests
+        # --test-threads=1 because tests share a single DB; some create
+        # resources that others depend on.
+        run: cargo test --test integration_test --verbose -- --test-threads=1
+
+      - name: Run smoke tests (the ones in integration_test.rs marked `smoke_*`)
+        # Smoke tests need a running server, so they live in integration_test.rs.
+        # Filter to just `smoke_*` so a failing smoke doesn't block on other
+        # integration test failures (those have separate handling above).
+        run: cargo test --test integration_test smoke --verbose -- --test-threads=1
+
+  # ── Docker build ────────────────────────────────────────────────
+  # Validates that the multi-stage Dockerfile actually builds. This catches
+  # Docker-layer-cache regressions early. Only runs on master/dev (not on
+  # every PR — keeps PR checks fast).
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs: [build-and-unit, integration]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        run: docker build -t crm-qi:ci-test .
+
+      - name: Verify image size is reasonable (multi-stage should be < 500MB)
+        run: |
+          SIZE=$(docker image inspect crm-qi:ci-test --format='{{.Size}}')
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Image size: ${SIZE_MB} MB"
+          if [ "$SIZE_MB" -gt 500 ]; then
+            echo "::error::Image is ${SIZE_MB}MB — multi-stage build regression?"
+            exit 1
+          fi
+
+      - name: Smoke test the container (without DB)
+        # Start the container with no DB; expect it to refuse to start
+        # (this is the documented behavior — fail-fast on missing DATABASE_URL).
+        run: |
+          docker run --rm crm-qi:ci-test 2>&1 | tee /tmp/docker-out.log
+          if ! grep -q "DATABASE_URL env var is required" /tmp/docker-out.log; then
+            echo "::error::Container did NOT fail-fast on missing DATABASE_URL"
+            exit 1
+          fi
+          echo "✓ Container correctly refuses to start without DATABASE_URL"

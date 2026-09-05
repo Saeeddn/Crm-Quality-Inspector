@@ -48,6 +48,7 @@
       <a class="nav-item" data-tab="interactions">تعاملات</a>
       <a class="nav-item" data-tab="agents">کارشناسان</a>
       <a class="nav-item" data-tab="customers">مشتریان</a>
+      <a class="nav-item" data-tab="risk">سلامت مشتریان</a>
       <a class="nav-item" data-tab="recommendations">پیشنهادها</a>
       <a class="nav-item" data-tab="issues">ایرادات</a>
       <a class="nav-item" data-tab="rubrics">استانداردها</a>
@@ -149,6 +150,32 @@
           <tbody></tbody>
         </table>
         <div id="customersPager" style="padding:8px 0"></div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-risk">
+      <div class="toolbar">
+        <h2>سلامت مشتریان (Customer Risk Score)</h2>
+        <div>
+          <span class="legend-inline" style="font-size:12px;color:var(--text-muted);margin-left:16px">
+            <span style="display:inline-block;width:10px;height:10px;background:#ef4444;border-radius:50%;margin-left:4px"></span>بالا (تماس فوری)
+            <span style="display:inline-block;width:10px;height:10px;background:#f59e0b;border-radius:50%;margin-left:12px"></span>متوسط (پیگیری)
+            <span style="display:inline-block;width:10px;height:10px;background:#10b981;border-radius:50%;margin-left:12px"></span>پایین (نظارت)
+          </span>
+        </div>
+      </div>
+      <div class="kpi-grid" id="riskKpiGrid"></div>
+      <div class="card">
+        <div class="card-header"><h3>مشتریان پرریسک</h3></div>
+        <div class="card-body" style="padding:0">
+          <table class="data-table" id="riskTable">
+            <thead><tr>
+              <th>ریسک</th><th>نام مشتری</th><th>امتیاز</th><th>سطح</th>
+              <th>تعاملات</th><th>ایرادات باز</th><th>میانگین</th><th>اقدام</th><th>دلایل</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
 

@@ -32,9 +32,14 @@ impl AppState {
     async fn seed_defaults(&self) -> Result<(), error::AppError> {
         // Admin credentials from env vars. There is NO default password for security:
         // if neither ADMIN_USERNAME nor ADMIN_PASSWORD is set, the server refuses to start.
-        // The first start creates the admin user from these env vars; subsequent starts
-        // leave the user alone (use the API to change the password, which then diverges
-        // from the env var on purpose).
+        //
+        // Env vars are BOOTSTRAP ONLY. They are read once on the very first start to
+        // create the initial admin user. After that, the web UI owns user management
+        // and changing ADMIN_PASSWORD in .env has NO EFFECT on existing users.
+        //
+        // Why bootstrap-only (not UPSERT): if we synced .env → DB on every restart,
+        // any password an operator changed via the UI would silently revert on the
+        // next deploy/restart. That's a security regression disguised as convenience.
         let admin_user = std::env::var("ADMIN_USERNAME")
             .map_err(|_| error::AppError::Config(
                 "ADMIN_USERNAME env var is required. Set it in .env or your shell.".into()
@@ -64,17 +69,17 @@ impl AppState {
                 )));
             }
         }
-        // First run: seed admin if no users exist.
-        // Subsequent runs: keep the password synced with ADMIN_PASSWORD env var
-        // so .env remains the single source of truth for fresh deploys.
-        // The UI can still change passwords; if you then restart with a different
-        // ADMIN_PASSWORD in .env, that new value will take effect again.
+        // Bootstrap-only: seed admin only on the very first start.
+        // After that, ADMIN_USERNAME/ADMIN_PASSWORD env vars are ignored — use the
+        // web UI (Users tab) to change passwords.
         if self.store.list_users().await?.is_empty() {
             self.store.ensure_admin(&admin_user, &admin_pass).await?;
+            eprintln!("✓ Seeded initial admin user '{}' from ADMIN_USERNAME env var.", admin_user);
+            eprintln!("  On subsequent restarts, ADMIN_PASSWORD env var is ignored —");
+            eprintln!("  use the web UI Users tab to change passwords.");
         } else {
-            self.store.ensure_admin(&admin_user, &admin_pass).await?;
-            eprintln!("✓ Admin password synced from ADMIN_PASSWORD env var.");
-            eprintln!("  (Use the web UI Users tab to change it; the new value will stick on this server until .env is edited again.)");
+            eprintln!("✓ Users already exist; ADMIN_USERNAME/ADMIN_PASSWORD env vars are ignored.");
+            eprintln!("  Use the web UI Users tab to change passwords.");
         }
         self.store.ensure_default_rubric().await?;
         if std::env::var("FORCE_SEED").ok().as_deref() == Some("1") {

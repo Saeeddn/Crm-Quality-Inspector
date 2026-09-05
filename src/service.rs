@@ -547,6 +547,158 @@ impl<'a> Service<'a> {
         recs.sort_by(|a, b| b.risk_score.partial_cmp(&a.risk_score).unwrap_or(std::cmp::Ordering::Equal));
         Ok(recs)
     }
+
+    // =================== Customer Risk Score ===================
+    //
+    // Aggregates interactions, scores, and open issues per customer to compute
+    // a 0-100 churn risk. Sorted highest risk first. Customers with no
+    // interactions get a baseline 30 (we don't know yet) and a "نظارت" action.
+
+    pub async fn customer_risk_scores(&self) -> AppResult<Vec<CustomerRiskScore>> {
+        let (interactions, scores, customers, issues) = tokio::try_join!(
+            self.store.list_interactions(),
+            self.store.list_scores(),
+            self.store.list_customers(),
+            self.store.list_issues(),
+        )?;
+
+        let mut out: Vec<CustomerRiskScore> = customers.iter().map(|c| {
+            let my_interactions: Vec<&Interaction> =
+                interactions.iter().filter(|i| i.customer_id == c.id).collect();
+            let my_scores: Vec<&Score> = my_interactions.iter()
+                .filter_map(|i| scores.iter().find(|s| s.interaction_id == i.id))
+                .collect();
+            let my_open_issues: u32 = issues.iter()
+                .filter(|iss| {
+                    iss.status != "بسته" && my_interactions.iter().any(|i| i.id == iss.interaction_id)
+                })
+                .count() as u32;
+
+            let mut factors: Vec<RiskFactor> = Vec::new();
+            let mut risk: f64 = 0.0;
+
+            // 1) Open issues — biggest signal of a troubled customer.
+            if my_open_issues > 0 {
+                let pts = (my_open_issues as f64 * 8.0).min(40.0);
+                factors.push(RiskFactor {
+                    code: "open_issues".into(),
+                    label: "ایرادات باز".into(),
+                    points: pts,
+                    reason: format!("{} ایراد باز برای این مشتری", my_open_issues),
+                });
+                risk += pts;
+            }
+
+            // 2) Quality — average score of scored interactions.
+            let avg_score: Option<f64> = if my_scores.is_empty() {
+                None
+            } else {
+                let sum: f64 = my_scores.iter().map(|s| s.overall_score).sum();
+                Some(sum / my_scores.len() as f64)
+            };
+            match avg_score {
+                Some(avg) if avg < 60.0 => {
+                    let pts = (100.0 - avg) * 0.3;
+                    factors.push(RiskFactor {
+                        code: "low_quality".into(),
+                        label: "کیفیت پایین".into(),
+                        points: pts,
+                        reason: format!("میانگین امتیاز: {:.1}", avg),
+                    });
+                    risk += pts;
+                }
+                Some(avg) if avg < 75.0 => {
+                    let pts = (100.0 - avg) * 0.15;
+                    factors.push(RiskFactor {
+                        code: "quality_warning".into(),
+                        label: "کیفیت متوسط".into(),
+                        points: pts,
+                        reason: format!("میانگین امتیاز: {:.1}", avg),
+                    });
+                    risk += pts;
+                }
+                _ => {}
+            }
+
+            // 3) VIP/corporate segment — higher stakes.
+            if c.segment.contains("VIP") || c.segment.contains("شرکتی") {
+                factors.push(RiskFactor {
+                    code: "vip_customer".into(),
+                    label: "مشتری ویژه".into(),
+                    points: 15.0,
+                    reason: format!("بخش: {}", c.segment),
+                });
+                risk += 15.0;
+            }
+
+            // 4) Recency — silent customer is a churn signal.
+            let last_interaction_at = my_interactions.iter()
+                .map(|i| i.created_at)
+                .max();
+            if let Some(last) = last_interaction_at {
+                let days = (chrono::Utc::now() - last).num_days();
+                if days > 30 {
+                    let pts = ((days - 30) as f64 * 0.2).min(10.0);
+                    factors.push(RiskFactor {
+                        code: "stale_customer".into(),
+                        label: "مشتری غیرفعال".into(),
+                        points: pts,
+                        reason: format!("{} روز بدون تعامل", days),
+                    });
+                    risk += pts;
+                }
+            } else {
+                // No interactions at all — moderate baseline risk.
+                factors.push(RiskFactor {
+                    code: "no_history".into(),
+                    label: "بدون سابقه".into(),
+                    points: 15.0,
+                    reason: "این مشتری هنوز هیچ تعاملی ندارد".into(),
+                });
+                risk += 15.0;
+            }
+
+            // 5) Critical failures among their scored interactions.
+            let critical_count = my_scores.iter().filter(|s| s.critical_fail).count() as u64;
+            if critical_count > 0 {
+                let pts = (critical_count as f64 * 5.0).min(15.0);
+                factors.push(RiskFactor {
+                    code: "critical_failures".into(),
+                    label: "خطای بحرانی".into(),
+                    points: pts,
+                    reason: format!("{} تعامل با خطای بحرانی", critical_count),
+                });
+                risk += pts;
+            }
+
+            let risk = risk.clamp(0.0, 100.0);
+            let level = if risk >= 70.0 { "بالا" }
+                else if risk >= 40.0 { "متوسط" }
+                else { "پایین" }.to_string();
+            let recommended_action = match level.as_str() {
+                "بالا" => "تماس فوری".to_string(),
+                "متوسط" => "پیگیری".to_string(),
+                _ => "نظارت".to_string(),
+            };
+
+            CustomerRiskScore {
+                customer_id: c.id.clone(),
+                customer_name: c.name.clone(),
+                risk_score: (risk * 100.0).round() / 100.0,
+                level,
+                factors,
+                total_interactions: my_interactions.len() as u32,
+                scored_interactions: my_scores.len() as u32,
+                open_issues: my_open_issues,
+                avg_score: avg_score.map(|a| (a * 100.0).round() / 100.0),
+                last_interaction_at,
+                recommended_action,
+            }
+        }).collect();
+
+        out.sort_by(|a, b| b.risk_score.partial_cmp(&a.risk_score).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(out)
+    }
 }
 
 // =====================

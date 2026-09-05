@@ -93,6 +93,24 @@ pub struct RiskFactor {
     pub reason: String,       // دلیل فارسی
 }
 
+/// Per-customer health/risk score. Distinct from `QaRecommendation` which is
+/// per-interaction. A customer's risk is an aggregate of all interactions,
+/// open issues, agent performance, and recency.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CustomerRiskScore {
+    pub customer_id: String,
+    pub customer_name: String,
+    pub risk_score: f64,         // 0-100
+    pub level: String,           // "بالا" / "متوسط" / "پایین"
+    pub factors: Vec<RiskFactor>,
+    pub total_interactions: u32,
+    pub scored_interactions: u32,
+    pub open_issues: u32,
+    pub avg_score: Option<f64>,
+    pub last_interaction_at: Option<DateTime<Utc>>,
+    pub recommended_action: String,  // "تماس فوری" / "پیگیری" / "نظارت"
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QaRecommendation {
     pub interaction_id: String,
