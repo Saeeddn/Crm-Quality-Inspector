@@ -53,51 +53,40 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --all -- --check
-        continue-on-error: true  # don't block on style; surface as a warning
+        continue-on-error: true
 
       - name: Run clippy
         run: cargo clippy --all-targets -- -D warnings
-        continue-on-error: true  # don't block on lints; surface as a warning
+        continue-on-error: true
 
   # ── Integration tests ───────────────────────────────────────────
-  # Requires a live Postgres + a running server. Spins up Postgres via
-  # the service container, builds the server binary, starts it in the
-  # background, waits for /api/health to respond, then runs the suite
-  # against it. The server is killed in the always() cleanup step.
+  # Requires a live Postgres + a running server. We don't use a service
+  # container for Postgres because the env vars don't always propagate
+  # reliably to the entrypoint script, which makes the password auth
+  # fail with no obvious cause. Instead, we start Postgres ourselves
+  # via docker run with env vars set explicitly.
   integration:
     name: Integration tests (Postgres + server)
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: crm_test
-          POSTGRES_PASSWORD: crm_test_pass
-          POSTGRES_DB: crm_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U crm_test -d crm_test"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
     env:
       DATABASE_URL: postgres://crm_test:***@localhost:5432/crm_test
       # These MUST match the credentials in tests/integration_test.rs —
       # the smoke tests hardcode "admin"/"NewSecretPass789" for login.
-      # If you change one, change both.
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: NewSecretPass789
       RUST_LOG: warn
       SERVER_ADDR: 127.0.0.1:3000
+      POSTGRES_USER: crm_test
+      POSTGRES_PASSWORD: crm_test_pass
+      POSTGRES_DB: crm_test
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install libpq (build dep for sqlx)
-        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+      - name: Install libpq (build dep for sqlx) + postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev postgresql-client
 
       - name: Cache cargo registry and build artifacts
         uses: actions/cache@v4
@@ -110,17 +99,33 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-int-
 
-      - name: Wait for Postgres to be ready
+      - name: Start Postgres
+        # Service containers were unreliable for env-var propagation;
+        # running docker ourselves gives us explicit control.
+        run: |
+          docker run -d --name ci-postgres \
+            -e POSTGRES_USER="$POSTGRES_USER" \
+            -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            -e POSTGRES_DB="$POSTGRES_DB" \
+            -p 5432:5432 \
+            postgres:16-alpine
+          echo "Postgres container started"
+
+      - name: Wait for Postgres to be ready and verify auth
         run: |
           for i in $(seq 1 30); do
-            if pg_isready -h localhost -U crm_test -d crm_test; then
-              echo "Postgres ready"
-              exit 0
+            if pg_isready -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB"; then
+              echo "pg_isready at attempt $i"
+              if PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1" > /dev/null 2>&1; then
+                echo "Postgres auth verified at attempt $i"
+                exit 0
+              fi
             fi
-            echo "Waiting for postgres ($i/30)..."
+            echo "Waiting for Postgres (attempt $i/30)..."
             sleep 1
           done
-          echo "Postgres never became ready"
+          echo "::error::Postgres did not become ready or auth failed"
+          docker logs ci-postgres || true
           exit 1
 
       - name: Build release binary
@@ -130,14 +135,12 @@ jobs:
 
       - name: Start server in background
         # The integration tests in tests/integration_test.rs assume the
-        # server is already running (they make HTTP requests to
-        # 127.0.0.1:3000). Start it here, capture logs, and kill it in
-        # the always() cleanup step regardless of test outcome.
+        # server is already running. Start it here, capture logs, kill in
+        # the always() cleanup step.
         #
-        # We move .env aside because src/main.rs auto-loads it via
-        # dotenvy, and a stale .env (with different DATABASE_URL/admin
-        # credentials) would silently override the CI env vars set in
-        # this job.
+        # We move .env aside because src/main.rs auto-loads it via dotenvy,
+        # and a stale .env (with different DATABASE_URL/admin credentials)
+        # would silently override the CI env vars set in this job.
         run: |
           set -m
           if [ -f .env ]; then
@@ -176,7 +179,6 @@ jobs:
         run: cargo test --test integration_test --verbose -- --test-threads=1
 
       - name: Stop server (always)
-        # Run on both success and failure so the runner cleans up.
         if: always()
         run: |
           if [ -n "${SERVER_PID:-}" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -189,6 +191,10 @@ jobs:
           fi
           echo "--- server.log tail (last 50 lines) ---"
           tail -n 50 /tmp/server.log || true
+
+      - name: Stop Postgres (always)
+        if: always()
+        run: docker rm -f ci-postgres 2>/dev/null || true
 
   # ── Docker build ────────────────────────────────────────────────
   # Validates that the multi-stage Dockerfile actually builds. This catches
