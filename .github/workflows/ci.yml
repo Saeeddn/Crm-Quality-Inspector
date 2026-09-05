@@ -61,15 +61,21 @@ jobs:
 
   # ── Integration tests ───────────────────────────────────────────
   # Requires a live Postgres + a running server. We don't use a service
-  # container for Postgres because the env vars don't always propagate
-  # reliably to the entrypoint script, which makes the password auth
-  # fail with no obvious cause. Instead, we start Postgres ourselves
-  # via docker run with env vars set explicitly.
+  # container for Postgres because env-var propagation to the entrypoint
+  # was unreliable. We start Postgres ourselves with `docker run`, then
+  # build the server binary, start it in the background, wait for
+  # /api/health, and run the suite. The server is killed in the
+  # always() cleanup step.
   integration:
     name: Integration tests (Postgres + server)
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: postgres://crm_test:***@localhost:5432/crm_test
+      # Use 127.0.0.1 (not localhost) so both psql and the Rust server
+      # connect over TCP. psql on some runners resolves localhost to the
+      # Unix socket, where pg_hba is 'trust' by default — so a passing
+      # psql check on localhost did not actually exercise the same
+      # auth path the server would use.
+      DATABASE_URL: postgres://crm_test:***@127.0.0.1:5432/crm_test
       # These MUST match the credentials in tests/integration_test.rs —
       # the smoke tests hardcode "admin"/"NewSecretPass789" for login.
       ADMIN_USERNAME: admin
@@ -100,8 +106,6 @@ jobs:
             ${{ runner.os }}-cargo-int-
 
       - name: Start Postgres
-        # Service containers were unreliable for env-var propagation;
-        # running docker ourselves gives us explicit control.
         run: |
           docker run -d --name ci-postgres \
             -e POSTGRES_USER="$POSTGRES_USER" \
@@ -111,14 +115,16 @@ jobs:
             postgres:16-alpine
           echo "Postgres container started"
 
-      - name: Wait for Postgres to be ready and verify auth
+      - name: Wait for Postgres to be ready and verify auth over TCP
         run: |
           for i in $(seq 1 30); do
-            if pg_isready -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB"; then
-              echo "pg_isready at attempt $i"
-              if PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1" > /dev/null 2>&1; then
-                echo "Postgres auth verified at attempt $i"
+            if pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
+              if PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1" > /dev/null 2>&1; then
+                echo "Postgres TCP auth verified at attempt $i"
                 exit 0
+              else
+                echo "psql over TCP failed at attempt $i:"
+                PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1" 2>&1 | head -5 || true
               fi
             fi
             echo "Waiting for Postgres (attempt $i/30)..."
@@ -129,18 +135,12 @@ jobs:
           exit 1
 
       - name: Build release binary
-        # Integration tests hit the HTTP server on 127.0.0.1:3000, so we
-        # need a runnable binary — not just a `cargo test` artifact.
         run: cargo build --release --verbose --bin crm-quality-inspector
 
       - name: Start server in background
-        # The integration tests in tests/integration_test.rs assume the
-        # server is already running. Start it here, capture logs, kill in
-        # the always() cleanup step.
-        #
-        # We move .env aside because src/main.rs auto-loads it via dotenvy,
+        # Move .env aside because src/main.rs auto-loads it via dotenvy,
         # and a stale .env (with different DATABASE_URL/admin credentials)
-        # would silently override the CI env vars set in this job.
+        # would silently override the CI env vars.
         run: |
           set -m
           if [ -f .env ]; then
@@ -157,7 +157,6 @@ jobs:
           echo "Server started with PID $SERVER_PID"
 
       - name: Wait for server to be ready
-        # Poll /api/health until the server responds 200. Max ~30s.
         run: |
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
@@ -175,7 +174,6 @@ jobs:
           exit 1
 
       - name: Run integration tests
-        # --test-threads=1 because all tests share one DB and one server.
         run: cargo test --test integration_test --verbose -- --test-threads=1
 
       - name: Stop server (always)
