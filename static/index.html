@@ -51,6 +51,7 @@
       <a class="nav-item" data-tab="risk">سلامت مشتریان</a>
       <a class="nav-item" data-tab="recommendations">پیشنهادها</a>
       <a class="nav-item" data-tab="issues">ایرادات</a>
+      <a class="nav-item" data-tab="coaching">برنامه‌های آموزشی</a>
       <a class="nav-item" data-tab="rubrics">استانداردها</a>
       <a class="nav-item" data-tab="report">گزارش کارشناس</a>
       <a class="nav-item" data-tab="users">کاربران</a>
@@ -202,6 +203,27 @@
           <tbody></tbody>
         </table>
         <div id="issuesPager" style="padding:8px 0"></div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-coaching">
+      <div class="toolbar"><h2>برنامه‌های آموزشی (Closed-Loop QA)</h2></div>
+      <div class="filter-bar">
+        <select id="cStatus">
+          <option value="">همه وضعیتها</option>
+          <option>باز</option><option>در انتظار</option><option>شروع شده</option>
+          <option>در حال پیگیری</option><option>بسته شده</option><option>لغو شده</option>
+        </select>
+      </div>
+      <div class="card">
+        <table class="data-table" id="coachingTable">
+          <thead><tr>
+            <th>وضعیت</th><th>مشتری</th><th>ریشه مشکل</th><th>هدف آموزشی</th><th>پسوند موفقیت</th>
+            <th>پیگیری‌ها</th><th>مسئول</th><th>تاریخ اتمام</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <div id="coachingPager" style="padding:8px 0"></div>
       </div>
     </div>
 

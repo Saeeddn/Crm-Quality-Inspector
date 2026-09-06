@@ -15,7 +15,7 @@ const State = {
   agents: [], customers: [], interactions: [], rubrics: [],
   scores: {}, issues: [], recommendations: [], kpis: [],
   dashboard: null, agentsAvg: {},
-  loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, kpis: false, dashboard: false, rec: false },
+  loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, kpis: false, dashboard: false, rec: false, coaching: false },
   trendChart: null,
   scoreChart: null,
   agentChart: null,
@@ -398,6 +398,7 @@ function switchTab(tab) {
   else if (tab === 'agents') loadAgents();
   else if (tab === 'customers') loadCustomers();
   else if (tab === 'issues') loadIssues();
+  else if (tab === 'coaching') loadCoaching();
   else if (tab === 'rubrics') loadKpis();
   else if (tab === 'recommendations') loadRecommendations();
   else if (tab === 'risk') loadCustomerRisk();
@@ -1394,3 +1395,182 @@ async function checkConnection() {
 }
 checkConnection();
 setInterval(checkConnection, 10000);
+
+// ============ Coaching Plans ============
+let coachingPage = 1;
+const coachingPageSize = 10;
+
+async function loadCoaching(force = false) {
+  const status = $('#cStatus')?.value || '';
+  if (!force && State.loaded.coaching) { renderCoaching(); return; }
+  try {
+    const params = new URLSearchParams({ offset: (coachingPage - 1) * coachingPageSize, limit: coachingPageSize });
+    if (status) params.set('status', status);
+    const res = await apiFetch('/api/coaching-plans?' + params);
+    const data = await res.json();
+    State.coachingPlans = data.items || [];
+    State.coachingTotalPages = Math.ceil((data.total || 0) / coachingPageSize);
+    State.loaded.coaching = true;
+    renderCoaching();
+  } catch (e) {
+    toast('خطا در بارگذاری برنامههای آموزشی', 'error');
+  }
+}
+
+function renderCoaching() {
+  const tbody = document.querySelector('#coachingTable tbody');
+  if (!tbody) return;
+  const plans = State.coachingPlans || [];
+  if (plans.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">برنامه آموزشی یافت نشد</td></tr>';
+    return;
+  }
+  const statusLabels = {
+    'open': 'باز', 'waiting_feedback': 'در انتظار', 'in_progress': 'شروع شده',
+    'follow_ups_active': 'در حال پیگیری', 'closed': 'بسته شده', 'cancelled': 'لغو شده'
+  };
+  tbody.innerHTML = plans.map(p => `
+    <tr>
+      <td><span class="badge badge-${p.status || 'open'}">${statusLabels[p.status] || p.status}</span></td>
+      <td>${escHtml(p.customer_name || p.interaction_customer_name || '-')}</td>
+      <td title="${escHtml(p.root_problem_details || '')}">${trimText(p.root_problem_details, 30)}</td>
+      <td title="${escHtml(p.learning_objective || '')}">${trimText(p.learning_objective || '-', 30)}</td>
+      <td>${escHtml(p.success_metric || '-')}</td>
+      <td>${p.follow_up_count || 0}/${p.max_follow_ups || 3}</td>
+      <td>${escHtml(p.assigned_coach || '-')}</td>
+      <td>${formatDate(p.end_date || p.created_at || '')}</td>
+      <td class="row-actions">
+        ${renderCoachingActions(p)}
+      </td>
+    </tr>
+  `).join('');
+  renderPagination('#coachingPager', State.coachingPlans.length, coachingPage, State.coachingTotalPages || 1, (p) => {
+    coachingPage = p;
+    loadCoaching(true);
+  });
+  // Attach action handlers
+  tbody.querySelectorAll('[data-action-coaching]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const action = e.currentTarget.dataset.actionCoaching;
+      const planId = e.currentTarget.dataset.planId;
+      handleCoachingAction(action, planId);
+    });
+  });
+}
+
+function renderCoachingActions(p) {
+  const actions = [];
+  if (p.status === 'open') {
+    actions.push(`<button class="btn btn-sm btn-secondary" data-action-coaching="start" data-plan-id="${escHtml(p.id)}">شروع</button>`);
+  } else if (p.status === 'waiting_feedback') {
+    actions.push(`<button class="btn btn-sm btn-secondary" data-action-coaching="progress" data-plan-id="${escHtml(p.id)}">ادامه</button>`);
+  } else if (p.status === 'in_progress') {
+    actions.push(`<button class="btn btn-sm btn-primary" data-action-coaching="review" data-plan-id="${escHtml(p.id)}">مرور</button>`);
+  } else if (p.status === 'follow_ups_active') {
+    actions.push(`<button class="btn btn-sm btn-secondary" data-action-coaching="close" data-plan-id="${escHtml(p.id)}">بستن</button>`);
+  }
+  actions.push(`<button class="btn btn-sm btn-ghost" data-action-coaching="cancel" data-plan-id="${escHtml(p.id)}">لغو</button>`);
+  return actions.join(' ');
+}
+
+async function handleCoachingAction(action, planId) {
+  const plans = State.coachingPlans || [];
+  const plan = plans.find(p => p.id === planId);
+  if (!plan) return;
+  try {
+    let resp;
+    switch (action) {
+      case 'start':
+        resp = await apiFetch(`/api/coaching-plans/${planId}/transition`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ to_status: 'in_progress' }) });
+        break;
+      case 'progress':
+        resp = await apiFetch(`/api/coaching-plans/${planId}/transition`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ to_status: 'follow_ups_active' }) });
+        break;
+      case 'review':
+        openReviewModal(plan);
+        return;
+      case 'close':
+        resp = await apiFetch(`/api/coaching-plans/${planId}/transition`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ to_status: 'closed' }) });
+        break;
+      case 'cancel':
+        if (!confirm('آیا از لغو این برنامه اطمینان دارید؟')) return;
+        resp = await apiFetch(`/api/coaching-plans/${planId}/transition`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ to_status: 'cancelled' }) });
+        break;
+      default: return;
+    }
+    if (resp.ok) { toast('وضعیت با موفقیت تغییر کرد', 'success'); loadCoaching(true); }
+    else { const err = await resp.json().catch(() => ({})); toast(err.detail || 'خطا', 'error'); }
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function openReviewModal(plan) {
+  showLoading('در حال بارگذاری...');
+  apiFetch(`/api/coaching-plans/${plan.id}`)
+    .then(r => r.json())
+    .then(data => {
+      hideLoading();
+      const fup = data.follow_ups || [];
+      let html = `
+        <div style="margin-bottom:16px">
+          <strong>مشتری:</strong> ${escHtml(plan.customer_name || '-')} |
+          <strong>ریشه مشکل:</strong> ${trimText(plan.root_problem_details || '-', 60)} |
+          <strong>هدف آموزشی:</strong> ${trimText(plan.learning_objective || '-', 60)}
+        </div>
+        <h4 style="margin:16px 0 8px">پیگیری‌ها (${fup.length} مورد)</h4>
+        <table class="data-table">
+          <thead><tr><th>تاریخ</th><th>معیار</th><th>نمره</th><th>نظر مربی</th><th>نظر مشتری</th></tr></thead>
+          <tbody>
+            ${fup.map(f => `<tr>
+              <td>${formatDate(f.completed_at || '')}</td>
+              <td>${escHtml(f.criteria || '-')}</td>
+              <td>${escHtml(f.score || '-')}</td>
+              <td>${escHtml(f.coach_comment || '-')}</td>
+              <td>${escHtml(f.customer_comment || '-')}</td>
+            </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">هنوز پیگیری ثبت نشده</td></tr>'}
+          </tbody>
+        </table>
+      `;
+      const score = Math.round((fup.reduce((s, f) => s + (parseFloat(f.score) || 0), 0) / (fup.length || 1)) * 10) / 10;
+      html += `
+        <div style="margin-top:16px;padding:12px;background:var(--surface-2);border-radius:8px">
+          <strong>میانگین نمرات:</strong> ${score.toFixed(1)} |
+          <strong>حد موفقیت:</strong> ${plan.success_metric || '-'}
+          ${fup.length > 0 && parseFloat(plan.success_metric) > 0 && score >= parseFloat(plan.success_metric) ? ' <span style="color:var(--success)">✅ موفق</span>' : ''}
+        </div>
+      `;
+      html += `
+        <div style="margin-top:16px">
+          <button class="btn btn-secondary" onclick="submitFollowUp(${JSON.stringify(plan.id).replace(/"/g, '&quot;')})">ثبت بازخورد مشتری</button>
+          <button class="btn btn-success" onclick="closeFromReview(${JSON.stringify(plan.id).replace(/"/g, '&quot;')})">بستن برنامه</button>
+          <button class="btn btn-ghost" onclick="hideModal()">بستن</button>
+        </div>
+      `;
+      showModal('مرور برنامه آموزشی', html);
+    })
+    .catch(e => { hideLoading(); toast(e.message, 'error'); });
+}
+
+async function submitFollowUp(planId) {
+  const score = prompt('نمره مشتری (۰-۱۰):');
+  if (score === null) return;
+  const comment = prompt('نظر مشتری (اختیاری):') || '';
+  try {
+    const resp = await apiFetch(`/api/coaching-plans/${planId}/follow-up`, {
+      method: 'POST', headers: jsonHeaders(),
+      body: JSON.stringify({ criteria: 'customer_feedback', score: parseFloat(score), customer_comment: comment, coach_comment: 'از طریق مرور' })
+    });
+    if (resp.ok) { toast('ثبت شد', 'success'); hideModal(); loadCoaching(true); }
+    else { toast('خطا', 'error'); }
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function closeFromReview(planId) {
+  if (!confirm('آیا برنامه بسته شود؟')) return;
+  apiFetch(`/api/coaching-plans/${planId}/transition`, {
+    method: 'POST', headers: jsonHeaders(),
+    body: JSON.stringify({ to_status: 'closed' })
+  }).then(r => {
+    if (r.ok) { hideModal(); loadCoaching(true); }
+    else { toast('خطا', 'error'); }
+  }).catch(e => { hideModal(); toast(e.message, 'error'); });
+}
