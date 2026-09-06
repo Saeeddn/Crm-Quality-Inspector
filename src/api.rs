@@ -11,7 +11,7 @@ use axum::{
     routing::{get, patch, post},
     Json, Router,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 use chrono::Utc;
@@ -55,18 +55,19 @@ pub fn router() -> Router<AppState> {
         .route("/coaching/plans/:id/acknowledge", post(acknowledge_coaching_plan_handler))
         .route("/coaching/plans/:id/close", post(close_coaching_plan_handler))
         .route("/coaching/plans/:id/escalate", post(escalate_coaching_plan_handler))
-        .route("/api/coaching/summary", get(coaching_summary_handler))
-        // =================== Calibration Sessions ===================
-        .route("/api/calibration/sessions", get(list_calibration_sessions_handler))
-        .route("/api/calibration/sessions", post(create_calibration_session_handler))
-        .route("/api/calibration/sessions/{id}", get(get_calibration_session_handler))
-        .route("/api/calibration/sessions/{id}/transition", post(transition_calibration_session_handler))
-        .route("/api/calibration/sessions/{id}/score", post(submit_calibration_score_handler))
-        .route("/api/calibration/sessions/{id}/my-status", get(calibration_my_status_handler))
-        .route("/api/calibration/sessions/{id}/decisions", post(save_calibration_decisions_handler))
-        .route("/api/calibration/rubrics/{rubric_id}/history", get(calibration_rubric_history_handler))
-        .route("/api/calibration/summary", get(calibration_summary_handler))
-}
+        .route("/coaching/summary", get(coaching_summary_handler))
+        .route("/coaching/plans/:id/follow-ups", post(record_coaching_follow_up_handler))
+                // =================== Calibration Sessions ===================
+                .route("/calibration/sessions", get(list_calibration_sessions_handler))
+                .route("/calibration/sessions", post(create_calibration_session_handler))
+                .route("/calibration/sessions/:id", get(get_calibration_session_handler))
+                .route("/calibration/sessions/:id/transition", post(transition_calibration_session_handler))
+                .route("/calibration/sessions/:id/score", post(submit_calibration_score_handler))
+                .route("/calibration/sessions/:id/my-status", get(calibration_my_status_handler))
+                .route("/calibration/sessions/:id/decisions", post(save_calibration_decisions_handler))
+                .route("/calibration/rubrics/:rubric_id/history", get(calibration_rubric_history_handler))
+                .route("/calibration/summary", get(calibration_summary_handler))
+        }
 
 pub async fn serve_index() -> impl IntoResponse {
     let html = include_str!("../static/index.html");
@@ -649,7 +650,7 @@ pub async fn create_coaching_plan_handler(
     if !me.is_admin {
         return Err(AppError::Forbidden("admin only".into()));
     }
-    let id = state.store.next_id("coaching_plans").await?;
+    let id = state.store.next_id("coaching_plans_id_seq").await?;
     let plan = CoachingPlan {
         id,
         agent_id: req.agent_id,
@@ -761,6 +762,33 @@ pub async fn escalate_coaching_plan_handler(
     Ok(ok(json!({ "id": id, "status": "escalated" })))
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FollowUpCreate {
+    pub interaction_id: String,
+    #[serde(default)]
+    pub criterion_scores: std::collections::HashMap<String, f64>,
+    pub overall_score: f64,
+    pub success: bool,
+}
+
+pub async fn record_coaching_follow_up_handler(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<FollowUpCreate>,
+) -> AppResult<Json<serde_json::Value>> {
+    let fu = crate::models::CoachingFollowUp {
+        id: state.store.next_id("coaching_follow_ups_id_seq").await?,
+        plan_id: id,
+        interaction_id: req.interaction_id,
+        measured_at: chrono::Utc::now(),
+        criterion_scores: req.criterion_scores,
+        overall_score: req.overall_score,
+        success: req.success,
+    };
+    state.store.record_coaching_follow_up(&fu).await?;
+    Ok(ok(json!({ "id": fu.id, "status": "recorded" })))
+}
+
 pub async fn coaching_summary_handler(
     State(state): State<AppState>,
 ) -> AppResult<Json<serde_json::Value>> {
@@ -803,7 +831,7 @@ pub async fn create_calibration_session_handler(
         return Err(AppError::Forbidden("admin only".into()));
     }
     let session = CalibrationSession {
-        id: state.store.next_id("calibration_sessions").await?,
+        id: state.store.next_id("calibration_sessions_id_seq").await?,
         name: body["name"].as_str().unwrap_or("").to_string(),
         status: "draft".to_string(),
         rubric_id: body["rubric_id"].as_str().unwrap_or("").to_string(),

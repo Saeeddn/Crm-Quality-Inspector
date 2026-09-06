@@ -1256,9 +1256,15 @@ impl Store {
             .await?;
             let mut out = Vec::with_capacity(rows.len());
             for r in rows {
-                let raw: String = r.get("criterion_scores");
-                let criterion_scores: std::collections::HashMap<String, f64> =
-                    serde_json::from_str(&raw).unwrap_or_default();
+                            let criterion_scores: std::collections::HashMap<String, f64> = r
+                                .get::<serde_json::Value, _>("criterion_scores")
+                                .as_object()
+                                .map(|obj| {
+                                    obj.iter()
+                                        .filter_map(|(k, v)| v.as_f64().map(|n| (k.clone(), n)))
+                                        .collect()
+                                })
+                                .unwrap_or_default();
                 out.push(CoachingFollowUp {
                     id: r.get("id"),
                     plan_id: r.get("plan_id"),
@@ -1301,18 +1307,18 @@ impl Store {
                 "SELECT COUNT(*) FROM coaching_plans WHERE status='escalated'"
             ).fetch_one(&self.pool).await?;
             let avg_hours: Option<f64> = sqlx::query_scalar(
-                "SELECT AVG(EXTRACT(EPOCH FROM (acknowledged_at - created_at)) / 3600.0)
-                 FROM coaching_plans
-                 WHERE acknowledged_at IS NOT NULL
-                   AND created_at > NOW() - INTERVAL '30 days'"
-            ).fetch_one(&self.pool).await?;
-            let improvement_pct: Option<f64> = sqlx::query_scalar(
-                "SELECT
-                   100.0 * SUM(CASE WHEN closed_outcome='improved' THEN 1 ELSE 0 END)::FLOAT
-                        / NULLIF(COUNT(*) FILTER (WHERE status='closed'), 0)
-                 FROM coaching_plans
-                 WHERE closed_at > NOW() - INTERVAL '90 days'"
-            ).fetch_one(&self.pool).await?;
+                            "SELECT AVG(EXTRACT(EPOCH FROM (acknowledged_at - created_at)) / 3600.0)::FLOAT8
+                             FROM coaching_plans
+                             WHERE acknowledged_at IS NOT NULL
+                               AND created_at > NOW() - INTERVAL '30 days'"
+                        ).fetch_one(&self.pool).await?;
+                        let improvement_pct: Option<f64> = sqlx::query_scalar(
+                            "SELECT
+                               100.0 * SUM(CASE WHEN closed_outcome='improved' THEN 1 ELSE 0 END)::FLOAT8
+                                    / NULLIF(COUNT(*) FILTER (WHERE status='closed'), 0)
+                             FROM coaching_plans
+                             WHERE closed_at > NOW() - INTERVAL '90 days'"
+                        ).fetch_one(&self.pool).await?;
             Ok(CoachingSummary {
                 active_count: active as u32,
                 pending_ack_count: pending_ack as u32,
@@ -1376,25 +1382,33 @@ impl Store {
             let sample_json = serde_json::to_string(&s.sample_interaction_ids)
                 .map_err(|e| AppError::Internal(format!("serialize sample_interaction_ids: {e}")))?;
             sqlx::query(
-                "INSERT INTO calibration_sessions
-                    (id, name, status, rubric_id, reviewer_usernames, sample_interaction_ids,
-                     target_agreement_rate, min_reviewers_per_interaction, deadline_at,
-                     facilitator_id, created_at)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)"
-            )
-            .bind(&s.id)
-            .bind(&s.name)
-            .bind(&s.status)
-            .bind(&s.rubric_id)
-            .bind(reviewer_json.as_str())
-            .bind(sample_json.as_str())
-            .bind(s.target_agreement_rate)
-            .bind(s.min_reviewers_per_interaction as i32)
-            .bind(&s.deadline_at)
-            .bind(&s.facilitator_id)
-            .bind(&s.created_at)
-            .execute(&self.pool).await?;
-            Ok(())
+                            "INSERT INTO calibration_sessions
+                                                (id, name, status, rubric_id, reviewer_usernames, sample_interaction_ids,
+                                                 target_agreement_rate, min_reviewers_per_interaction, deadline_at,
+                                                 facilitator_id, created_at, meeting_started_at, agreement_rate, variance_per_criterion)
+                                             VALUES ($1,$2,$3,$4,$5::JSONB,$6::JSONB,$7,$8,$9,$10,$11,$12,$13,$14)
+                                             ON CONFLICT (id) DO UPDATE SET
+                                                status = EXCLUDED.status,
+                                                meeting_started_at = COALESCE(EXCLUDED.meeting_started_at, calibration_sessions.meeting_started_at),
+                                                agreement_rate = COALESCE(EXCLUDED.agreement_rate, calibration_sessions.agreement_rate),
+                                                variance_per_criterion = COALESCE(EXCLUDED.variance_per_criterion, calibration_sessions.variance_per_criterion)"
+                        )
+                        .bind(&s.id)
+                        .bind(&s.name)
+                        .bind(&s.status)
+                        .bind(&s.rubric_id)
+                        .bind(reviewer_json.as_str())
+                        .bind(sample_json.as_str())
+                        .bind(s.target_agreement_rate)
+                        .bind(s.min_reviewers_per_interaction as i32)
+                        .bind(&s.deadline_at)
+                        .bind(&s.facilitator_id)
+                        .bind(&s.created_at)
+                        .bind(&s.meeting_started_at)
+                        .bind(s.agreement_rate)
+                        .bind(&s.variance_per_criterion)
+                        .execute(&self.pool).await?;
+                        Ok(())
         }
 
         pub async fn get_calibration_session(&self, id: &str) -> AppResult<Option<CalibrationSession>> {
@@ -1404,67 +1418,85 @@ impl Store {
             .bind(id)
             .fetch_optional(&self.pool).await?;
             Ok(row.map(|r| CalibrationSession {
-                id: r.get("id"),
-                name: r.get("name"),
-                status: r.get("status"),
-                rubric_id: r.get("rubric_id"),
-                reviewer_usernames: { let raw: String = r.get("reviewer_usernames"); serde_json::from_str(&raw).unwrap_or_default() },
-                sample_interaction_ids: { let raw: String = r.get("sample_interaction_ids"); serde_json::from_str(&raw).unwrap_or_default() },
-                target_agreement_rate: r.get("target_agreement_rate"),
-                min_reviewers_per_interaction: r.get::<i32, _>("min_reviewers_per_interaction") as u32,
-                deadline_at: r.get("deadline_at"),
-                meeting_started_at: r.get("meeting_started_at"),
-                facilitator_id: r.get("facilitator_id"),
-                agreement_rate: r.get("agreement_rate"),
-                variance_per_criterion: r.get("variance_per_criterion"),
+                            id: r.get("id"),
+                            name: r.get("name"),
+                            status: r.get("status"),
+                            rubric_id: r.get("rubric_id"),
+                            reviewer_usernames: r.get::<serde_json::Value, _>("reviewer_usernames")
+                                .as_array()
+                                .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(String::from).collect())
+                                .unwrap_or_default(),
+                            sample_interaction_ids: r.get::<serde_json::Value, _>("sample_interaction_ids")
+                                .as_array()
+                                .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(String::from).collect())
+                                .unwrap_or_default(),
+                            target_agreement_rate: r.get("target_agreement_rate"),
+                            min_reviewers_per_interaction: r.get::<i32, _>("min_reviewers_per_interaction") as u32,
+                            deadline_at: r.get("deadline_at"),
+                            meeting_started_at: r.get("meeting_started_at"),
+                            facilitator_id: r.get("facilitator_id"),
+                            agreement_rate: r.get("agreement_rate"),
+                            variance_per_criterion: r.get("variance_per_criterion"),
                 created_at: r.get("created_at"),
             }))
         }
 
         pub async fn list_calibration_sessions(
-            &self,
-            status: Option<&str>,
-            rubric_id: Option<&str>,
-            limit: i64,
-            offset: i64,
-        ) -> AppResult<(Vec<CalibrationSession>, i64)> {
-            let mut where_sql = String::new();
-            let mut params: Vec<(i32, &str)> = Vec::new();
-            let mut idx = 1i32;
-            if let Some(st) = status {
-                where_sql.push_str(&format!(" AND status = ${idx}"));
-                params.push((idx, st));
-                idx += 1;
-            }
-            if let Some(rubric) = rubric_id {
-                where_sql.push_str(&format!(" AND rubric_id = ${idx}"));
-                params.push((idx, rubric));
-                idx += 1;
-            }
-            let total: i64 = sqlx::query_scalar(
-                &format!("SELECT COUNT(*) FROM calibration_sessions WHERE 1=1 {where_sql}",)
-            )
-            .fetch_one(&self.pool).await?;
-            let query_str = format!(
-                "SELECT * FROM calibration_sessions WHERE 1=1 {where_sql}
-                 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
-            );
-            let mut q = sqlx::query(&query_str);
-            for (pidx, val) in &params {
-                q = q.bind(val);
-            }
-            q = q.bind(limit).bind(offset);
-            let rows = q.fetch_all(&self.pool).await?;
-            let sessions = rows.into_iter().map(|r| CalibrationSession {
-                id: r.get("id"),
-                name: r.get("name"),
-                status: r.get("status"),
-                rubric_id: r.get("rubric_id"),
-                reviewer_usernames: { let raw: String = r.get("reviewer_usernames"); serde_json::from_str(&raw).unwrap_or_default() },
-                sample_interaction_ids: { let raw: String = r.get("sample_interaction_ids"); serde_json::from_str(&raw).unwrap_or_default() },
-                target_agreement_rate: r.get("target_agreement_rate"),
-                min_reviewers_per_interaction: r.get::<i32, _>("min_reviewers_per_interaction") as u32,
-                deadline_at: r.get("deadline_at"),
+                    &self,
+                    status: Option<&str>,
+                    rubric_id: Option<&str>,
+                    limit: i64,
+                    offset: i64,
+                ) -> AppResult<(Vec<CalibrationSession>, i64)> {
+                    let mut where_sql = String::new();
+                    let mut params: Vec<String> = Vec::new();
+                    let mut idx = 1i32;
+                    if let Some(st) = status {
+                        where_sql.push_str(&format!(" AND status = ${idx}"));
+                        params.push(st.to_string());
+                        idx += 1;
+                    }
+                    if let Some(rubric) = rubric_id {
+                        where_sql.push_str(&format!(" AND rubric_id = ${idx}"));
+                        params.push(rubric.to_string());
+                        idx += 1;
+                    }
+                    // count query: only where params (LIMIT/OFFSET not included)
+                                let count_sql = format!("SELECT COUNT(*) FROM calibration_sessions WHERE 1=1 {where_sql}");
+                                let mut count_q = sqlx::query_scalar::<_, i64>(&count_sql);
+                    for p in &params {
+                        count_q = count_q.bind(p);
+                    }
+                    let total: i64 = count_q.fetch_one(&self.pool).await?;
+                    // main query: where params + LIMIT/OFFSET after them
+                    let limit_idx = idx; // next parameter index for LIMIT
+                    let offset_idx = idx + 1;
+                    let query_str = format!(
+                        "SELECT * FROM calibration_sessions WHERE 1=1 {where_sql}
+                         ORDER BY created_at DESC LIMIT ${limit_idx} OFFSET ${offset_idx}"
+                    );
+                    let mut q = sqlx::query(&query_str);
+                    for p in &params {
+                        q = q.bind(p);
+                    }
+                    q = q.bind(limit).bind(offset);
+                    let rows = q.fetch_all(&self.pool).await?;
+                                        let sessions = rows.into_iter().map(|r| CalibrationSession {
+                                    id: r.get("id"),
+                                    name: r.get("name"),
+                                    status: r.get("status"),
+                                    rubric_id: r.get("rubric_id"),
+                                    reviewer_usernames: r.get::<serde_json::Value, _>("reviewer_usernames")
+                                        .as_array()
+                                        .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(String::from).collect())
+                                        .unwrap_or_default(),
+                                    sample_interaction_ids: r.get::<serde_json::Value, _>("sample_interaction_ids")
+                                        .as_array()
+                                        .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(String::from).collect())
+                                        .unwrap_or_default(),
+                                    target_agreement_rate: r.get("target_agreement_rate"),
+                                    min_reviewers_per_interaction: r.get::<i32, _>("min_reviewers_per_interaction") as u32,
+                                    deadline_at: r.get("deadline_at"),
                 meeting_started_at: r.get("meeting_started_at"),
                 facilitator_id: r.get("facilitator_id"),
                 agreement_rate: r.get("agreement_rate"),
@@ -1498,24 +1530,27 @@ impl Store {
         }
 
         pub async fn get_my_submission_status(
-            &self,
-            session_id: &str,
-            reviewer: &str,
-        ) -> AppResult<(u32, u32)> {
-            let submitted: i64 = sqlx::query_scalar(
-                "SELECT COUNT(DISTINCT interaction_id) FROM calibration_scores
-                 WHERE session_id = $1 AND reviewer = $2"
-            )
-            .bind(session_id)
-            .bind(reviewer)
-            .fetch_one(&self.pool).await?;
-            let total: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*)::int FROM unnest($1::text[]) t"
-            )
-            .bind("sample_placeholder")
-            .fetch_one(&self.pool).await?;
-            Ok((submitted as u32, (total.max(1)) as u32))
-        }
+                    &self,
+                    session_id: &str,
+                    reviewer: &str,
+                ) -> AppResult<(u32, u32)> {
+                    let submitted: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(DISTINCT interaction_id) FROM calibration_scores
+                         WHERE session_id = $1 AND reviewer = $2"
+                    )
+                    .bind(session_id)
+                    .bind(reviewer)
+                    .fetch_one(&self.pool).await?;
+                    // total interactions in the session's sample list (JSONB -> text[] via jsonb_array_elements_text)
+                    let total: i64 = sqlx::query_scalar(
+                                    "SELECT COUNT(*) FROM calibration_sessions s,
+                                            jsonb_array_elements_text(s.sample_interaction_ids) t
+                                     WHERE s.id = $1"
+                                )
+                    .bind(session_id)
+                    .fetch_one(&self.pool).await?;
+                    Ok((submitted as u32, total as u32))
+                }
 
         pub async fn save_calibration_decisions(&self, d: &CalibrationDecision) -> AppResult<()> {
             let example = d.example_interaction_id.as_deref().unwrap_or("");
@@ -1550,14 +1585,12 @@ impl Store {
             // Group by interaction_id
             let mut by_interaction: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
             for r in &scores {
-                let iid: String = r.get("interaction_id");
-                let raw: String = r.get("criterion_scores");
-                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
-                    if val.is_object() {
-                        by_interaction.entry(iid).or_insert_with(Vec::new).push(val);
-                    }
-                }
-            }
+                            let iid: String = r.get("interaction_id");
+                            let raw = r.get::<serde_json::Value, _>("criterion_scores");
+                            if raw.is_object() {
+                                by_interaction.entry(iid).or_insert_with(Vec::new).push(raw);
+                            }
+                        }
             let mut variance_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
             let mut total_criteria = 0u32;
             let mut agreements = 0u32;
@@ -1603,32 +1636,38 @@ impl Store {
         ) -> AppResult<(Vec<CalibrationDecision>, i64)> {
             // Get all sessions for this rubric
             let session_ids: Vec<String> = sqlx::query_scalar(
-                "SELECT id FROM calibration_sessions WHERE rubric_id = $1
-                 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
-            )
+                            "SELECT id FROM calibration_sessions WHERE rubric_id = $1
+                             ORDER BY created_at DESC LIMIT $2::bigint OFFSET $3::bigint"
+                        )
             .bind(rubric_id)
             .bind(limit)
             .bind(offset)
             .fetch_all(&self.pool).await?;
             if session_ids.is_empty() { return Ok((vec![], 0)); }
-            let placeholders: Vec<String> = (1..=session_ids.len()).map(|i| format!("${i}")).collect();
-            let placeholders_str = placeholders.join(",");
-            let query = format!(
-                "SELECT * FROM calibration_decisions WHERE session_id IN ({})
-                 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
-                placeholders_str
-            );
+            let n = session_ids.len();
+                        let placeholders: Vec<String> = (1..=n).map(|i| format!("${i}")).collect();
+                        let placeholders_str = placeholders.join(",");
+                        let limit_pos = n + 1;
+                        let offset_pos = n + 2;
+                        let query = format!(
+                            "SELECT * FROM calibration_decisions WHERE session_id IN ({})
+                             ORDER BY created_at DESC LIMIT ${limit_pos}::bigint OFFSET ${offset_pos}::bigint",
+                            placeholders_str,
+                            limit_pos = limit_pos,
+                            offset_pos = offset_pos
+                        );
             let mut q = sqlx::query(&query);
             for sid in &session_ids { q = q.bind(sid); }
             q = q.bind(limit).bind(offset);
             let rows = q.fetch_all(&self.pool).await?;
-            let total: i64 = sqlx::query_scalar(
-                &format!(
-                    "SELECT COUNT(*) FROM calibration_decisions WHERE session_id IN ({})",
-                    placeholders_str
-                )
-            )
-            .fetch_one(&self.pool).await?;
+            let mut count_q = sqlx::query_scalar(
+                            &format!(
+                                "SELECT COUNT(*) FROM calibration_decisions WHERE session_id IN ({})",
+                                placeholders_str
+                            )
+                        );
+                        for sid in &session_ids { count_q = count_q.bind(sid); }
+                        let total: i64 = count_q.fetch_one(&self.pool).await?;
             let decisions = rows.into_iter().map(|r| CalibrationDecision {
                 id: r.get("id"),
                 session_id: r.get("session_id"),
