@@ -399,11 +399,13 @@ function switchTab(tab) {
   else if (tab === 'customers') loadCustomers();
   else if (tab === 'issues') loadIssues();
   else if (tab === 'coaching') loadCoaching();
+  else if (tab === 'calibration') loadCalibration();
   else if (tab === 'rubrics') loadKpis();
   else if (tab === 'recommendations') loadRecommendations();
   else if (tab === 'risk') loadCustomerRisk();
   else if (tab === 'report') loadAgents().then(populateReportAgents);
   else if (tab === 'users') loadUsers();
+  else if (tab === 'calibration') loadCalibration();
 }
 
 $$('.nav-item').forEach(n => n.addEventListener('click', () => switchTab(n.dataset.tab)));

@@ -52,6 +52,7 @@
       <a class="nav-item" data-tab="recommendations">پیشنهادها</a>
       <a class="nav-item" data-tab="issues">ایرادات</a>
       <a class="nav-item" data-tab="coaching">برنامه‌های آموزشی</a>
+      <a class="nav-item" data-tab="calibration">کالیبراسیون</a>
       <a class="nav-item" data-tab="rubrics">استانداردها</a>
       <a class="nav-item" data-tab="report">گزارش کارشناس</a>
       <a class="nav-item" data-tab="users">کاربران</a>
@@ -224,6 +225,28 @@
           <tbody></tbody>
         </table>
         <div id="coachingPager" style="padding:8px 0"></div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-calibration">
+      <div class="toolbar"><h2>کالیبراسیون (Blind Scoring)</h2></div>
+      <div class="filter-bar">
+        <select id="calStatus">
+          <option value="">همه وضعیتها</option>
+          <option>draft</option><option>scoring</option><option>in_session</option>
+          <option>completed</option><option>cancelled</option>
+        </select>
+        <button class="btn btn-primary" id="newCalBtn">+ جلسه جدید</button>
+      </div>
+      <div class="card">
+        <table class="data-table" id="calTable">
+          <thead><tr>
+            <th>وضعیت</th><th>نام</th><th>روبریک</th><th>تعداد سنجش</th>
+            <th>نرخ توافق</th><th>مهلت</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <div id="calPager" style="padding:8px 0"></div>
       </div>
     </div>
 

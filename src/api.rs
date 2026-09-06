@@ -7,13 +7,14 @@ use axum::{
     extract::{Extension, Path, Query, State},
     http::{header, StatusCode},
     middleware,
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Json as AxumJson},
     routing::{get, patch, post},
     Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
+use chrono::Utc;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -827,7 +828,7 @@ pub async fn create_calibration_session_handler(
         created_at: Utc::now(),
     };
     state.store.create_calibration_session(&session).await?;
-    Ok(created(session))
+    Ok(ok(session))
 }
 
 pub async fn get_calibration_session_handler(
@@ -917,8 +918,9 @@ pub async fn save_calibration_decisions_handler(
         return Err(AppError::Forbidden("admin only".into()));
     }
     let decisions: Vec<serde_json::Value> = body["decisions"].as_array()
-        .ok_or_else(|| AppError::BadRequest("decisions array required".into()))?;
-    for d in decisions {
+        .ok_or_else(|| AppError::BadRequest("decisions array required".into()))?
+        .clone();
+    for d in decisions.iter() {
         let decision = CalibrationDecision {
             id: format!("{}-{}-{}", session_id, d["criterion_id"], Utc::now().timestamp()),
             session_id: session_id.clone(),

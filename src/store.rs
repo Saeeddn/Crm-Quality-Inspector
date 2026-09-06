@@ -1445,12 +1445,11 @@ impl Store {
                 &format!("SELECT COUNT(*) FROM calibration_sessions WHERE 1=1 {where_sql}",)
             )
             .fetch_one(&self.pool).await?;
-            let mut q = sqlx::query(
-                &format!(
-                    "SELECT * FROM calibration_sessions WHERE 1=1 {where_sql}
-                     ORDER BY created_at DESC LIMIT $2 OFFSET $3"
-                )
+            let query_str = format!(
+                "SELECT * FROM calibration_sessions WHERE 1=1 {where_sql}
+                 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
             );
+            let mut q = sqlx::query(&query_str);
             for (pidx, val) in &params {
                 q = q.bind(val);
             }
