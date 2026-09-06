@@ -11,6 +11,7 @@ use axum::{
     routing::{get, patch, post},
     Json, Router,
 };
+use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -46,6 +47,14 @@ pub fn router() -> Router<AppState> {
         .route("/kpis/measure/:interaction_id", get(measure_interaction))
         .route("/reports/dashboard", get(dashboard))
         .route("/reports/agent/:id", get(agent_report))
+        // Coaching Plans (closed-loop QA)
+        .route("/coaching/plans", get(list_coaching_plans_handler).post(create_coaching_plan_handler))
+        .route("/coaching/plans/:id", get(get_coaching_plan_handler).patch(patch_coaching_plan_handler))
+        .route("/coaching/plans/:id/submit", post(submit_coaching_plan_handler))
+        .route("/coaching/plans/:id/acknowledge", post(acknowledge_coaching_plan_handler))
+        .route("/coaching/plans/:id/close", post(close_coaching_plan_handler))
+        .route("/coaching/plans/:id/escalate", post(escalate_coaching_plan_handler))
+        .route("/coaching/summary", get(coaching_summary_handler))
 }
 
 pub async fn serve_index() -> impl IntoResponse {
@@ -580,4 +589,170 @@ pub async fn auto_score_interaction(
     let s = Service::new(&state.store);
     let score = s.auto_score_and_save(&interaction_id).await?;
     Ok(ok(score))
+}
+
+// ============ Coaching Plans (Closed-Loop QA) ============
+
+#[derive(Deserialize)]
+pub struct CoachingListQuery {
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub offset: Option<i64>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+pub async fn list_coaching_plans_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CoachingListQuery>,
+) -> AppResult<Json<serde_json::Value>> {
+    let limit = q.limit.unwrap_or(25).max(1).min(200);
+    let offset = q.offset.unwrap_or(0).max(0);
+    let (items, total) = state
+        .store
+        .list_coaching_plans(
+            q.agent_id.as_deref(),
+            q.status.as_deref(),
+            limit,
+            offset,
+        )
+        .await?;
+    let total_pages = if limit > 0 { (total + limit - 1) / limit } else { 0 };
+    Ok(ok(json!({
+        "items": items,
+        "total": total,
+        "page": if limit > 0 { offset / limit + 1 } else { 1 },
+        "limit": limit,
+        "total_pages": total_pages,
+    })))
+}
+
+pub async fn create_coaching_plan_handler(
+    Extension(me): Extension<Arc<CurrentUser>>,
+    State(state): State<AppState>,
+    Json(req): Json<CoachingPlanCreate>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !me.is_admin {
+        return Err(AppError::Forbidden("admin only".into()));
+    }
+    let id = state.store.next_id("coaching_plans").await?;
+    let plan = CoachingPlan {
+        id,
+        agent_id: req.agent_id,
+        interaction_id: req.interaction_id,
+        created_by: me.username.clone(),
+        created_at: chrono::Utc::now(),
+        coaching_theme: req.coaching_theme,
+        behavior_gap: req.behavior_gap,
+        evidence: req.evidence,
+        root_cause: req.root_cause,
+        customer_impact: req.customer_impact,
+        practice_activity: req.practice_activity,
+        success_metric: req.success_metric,
+        follow_up_due_at: req.follow_up_due_at,
+        follow_up_review_count: req.follow_up_review_count,
+        status: "draft".into(),
+        acknowledged_at: None,
+        acknowledged_note: None,
+        closed_at: None,
+        closed_outcome: None,
+        escalated_at: None,
+    };
+    state.store.create_coaching_plan(&plan).await?;
+    Ok(ok(json!({ "id": plan.id, "status": plan.status })))
+}
+
+pub async fn get_coaching_plan_handler(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    let plan = state
+        .store
+        .get_coaching_plan(&id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("coaching_plan".to_string()))?;
+    let follow_ups = state.store.list_coaching_follow_ups(&id).await?;
+    Ok(ok(json!({ "plan": plan, "follow_ups": follow_ups })))
+}
+
+pub async fn patch_coaching_plan_handler(
+    Extension(me): Extension<Arc<CurrentUser>>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(patch): Json<CoachingPlanPatch>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !me.is_admin {
+        return Err(AppError::Forbidden("admin only".into()));
+    }
+    state.store.patch_coaching_plan(&id, &patch).await?;
+    Ok(ok(json!({ "id": id, "status": "patched" })))
+}
+
+pub async fn submit_coaching_plan_handler(
+    Extension(_me): Extension<Arc<CurrentUser>>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    state.store.transition_coaching_plan(&id, "submit", None, None).await?;
+    Ok(ok(json!({ "id": id, "status": "pending_acknowledgement" })))
+}
+
+pub async fn acknowledge_coaching_plan_handler(
+    Extension(me): Extension<Arc<CurrentUser>>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<AcknowledgeRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    let plan = state
+        .store
+        .get_coaching_plan(&id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("coaching_plan".to_string()))?;
+    // Agents can acknowledge only their own plan; admins can do any.
+    if !me.is_admin && plan.agent_id != me.username {
+        return Err(AppError::Forbidden("not your plan".into()));
+    }
+    state
+        .store
+        .transition_coaching_plan(&id, "acknowledge", None, req.note.as_deref())
+        .await?;
+    Ok(ok(json!({ "id": id, "status": "acknowledged" })))
+}
+
+pub async fn close_coaching_plan_handler(
+    Extension(me): Extension<Arc<CurrentUser>>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<CloseRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !me.is_admin {
+        return Err(AppError::Forbidden("admin only".into()));
+    }
+    state
+        .store
+        .transition_coaching_plan(&id, "close", Some(&req.outcome), None)
+        .await?;
+    Ok(ok(json!({ "id": id, "status": "closed", "outcome": req.outcome })))
+}
+
+pub async fn escalate_coaching_plan_handler(
+    Extension(me): Extension<Arc<CurrentUser>>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !me.is_admin {
+        return Err(AppError::Forbidden("admin only".into()));
+    }
+    state.store.transition_coaching_plan(&id, "escalate", None, None).await?;
+    Ok(ok(json!({ "id": id, "status": "escalated" })))
+}
+
+pub async fn coaching_summary_handler(
+    State(state): State<AppState>,
+) -> AppResult<Json<serde_json::Value>> {
+    let summary = state.store.get_coaching_summary().await?;
+    Ok(ok(summary))
 }
