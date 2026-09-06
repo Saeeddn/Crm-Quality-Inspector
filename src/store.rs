@@ -943,11 +943,392 @@ impl Store {
     }
 
     pub async fn delete_kpi(&self, id: &str) -> AppResult<()> {
-        sqlx::query("DELETE FROM kpis WHERE id = $1").bind(id).execute(&self.pool).await?;
-        Ok(())
-    }
+            sqlx::query("DELETE FROM kpis WHERE id = $1").bind(id).execute(&self.pool).await?;
+            Ok(())
+        }
 
-    // =================== DEMO SEED ===================
+        // =================== COACHING PLANS (Closed-Loop QA) ===================
+
+        /// Create a new coaching plan in `draft` status.
+        pub async fn create_coaching_plan(&self, p: &CoachingPlan) -> AppResult<()> {
+            sqlx::query(
+                "INSERT INTO coaching_plans
+                    (id, agent_id, interaction_id, created_by, created_at,
+                     coaching_theme, behavior_gap, evidence, root_cause, customer_impact,
+                     practice_activity, success_metric, follow_up_due_at,
+                     follow_up_review_count, status)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)"
+            )
+            .bind(&p.id)
+            .bind(&p.agent_id)
+            .bind(&p.interaction_id)
+            .bind(&p.created_by)
+            .bind(p.created_at)
+            .bind(&p.coaching_theme)
+            .bind(&p.behavior_gap)
+            .bind(&p.evidence)
+            .bind(&p.root_cause)
+            .bind(&p.customer_impact)
+            .bind(&p.practice_activity)
+            .bind(&p.success_metric)
+            .bind(p.follow_up_due_at)
+            .bind(p.follow_up_review_count as i32)
+            .bind(&p.status)
+            .execute(&self.pool)
+            .await?;
+            Ok(())
+        }
+
+        pub async fn get_coaching_plan(&self, id: &str) -> AppResult<Option<CoachingPlan>> {
+            let row = sqlx::query(
+                "SELECT id, agent_id, interaction_id, created_by, created_at,
+                        coaching_theme, behavior_gap, evidence, root_cause, customer_impact,
+                        practice_activity, success_metric, follow_up_due_at,
+                        follow_up_review_count, status,
+                        acknowledged_at, acknowledged_note,
+                        closed_at, closed_outcome, escalated_at
+                 FROM coaching_plans WHERE id = $1"
+            )
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
+            Ok(row.map(|r| CoachingPlan {
+                id: r.get("id"),
+                agent_id: r.get("agent_id"),
+                interaction_id: r.get("interaction_id"),
+                created_by: r.get("created_by"),
+                created_at: r.get("created_at"),
+                coaching_theme: r.get("coaching_theme"),
+                behavior_gap: r.get("behavior_gap"),
+                evidence: r.get("evidence"),
+                root_cause: r.get("root_cause"),
+                customer_impact: r.get("customer_impact"),
+                practice_activity: r.get("practice_activity"),
+                success_metric: r.get("success_metric"),
+                follow_up_due_at: r.get("follow_up_due_at"),
+                follow_up_review_count: r.get::<i32, _>("follow_up_review_count") as u32,
+                status: r.get("status"),
+                acknowledged_at: r.get("acknowledged_at"),
+                acknowledged_note: r.get("acknowledged_note"),
+                closed_at: r.get("closed_at"),
+                closed_outcome: r.get("closed_outcome"),
+                escalated_at: r.get("escalated_at"),
+            }))
+        }
+
+        /// Partial update — only fields set to Some are written.
+        pub async fn patch_coaching_plan(
+            &self,
+            id: &str,
+            p: &CoachingPlanPatch,
+        ) -> AppResult<()> {
+            sqlx::query(
+                "UPDATE coaching_plans SET
+                    coaching_theme      = COALESCE($2, coaching_theme),
+                    behavior_gap        = COALESCE($3, behavior_gap),
+                    evidence            = COALESCE($4, evidence),
+                    root_cause          = COALESCE($5, root_cause),
+                    customer_impact     = COALESCE($6, customer_impact),
+                    practice_activity   = COALESCE($7, practice_activity),
+                    success_metric      = COALESCE($8, success_metric),
+                    follow_up_due_at    = COALESCE($9, follow_up_due_at),
+                    follow_up_review_count = COALESCE($10, follow_up_review_count),
+                    status              = COALESCE($11, status)
+                 WHERE id = $1"
+            )
+            .bind(id)
+            .bind(&p.coaching_theme)
+            .bind(&p.behavior_gap)
+            .bind(&p.evidence)
+            .bind(&p.root_cause)
+            .bind(&p.customer_impact)
+            .bind(&p.practice_activity)
+            .bind(&p.success_metric)
+            .bind(p.follow_up_due_at)
+            .bind(p.follow_up_review_count.map(|n| n as i32))
+            .bind(&p.status)
+            .execute(&self.pool)
+            .await?;
+            Ok(())
+        }
+
+        /// Paginated list with optional filters. Mirrors `list_issues_paginated`.
+        pub async fn list_coaching_plans(
+            &self,
+            agent_id: Option<&str>,
+            status: Option<&str>,
+            limit: i64,
+            offset: i64,
+        ) -> AppResult<(Vec<CoachingPlan>, i64)> {
+            let mut where_sql = String::new();
+            let mut idx = 1;
+            if agent_id.is_some() { where_sql.push_str(&format!(" AND agent_id = ${idx}")); idx += 1; }
+            if status.is_some() { where_sql.push_str(&format!(" AND status = ${idx}")); idx += 1; }
+            let where_clause = if where_sql.is_empty() { String::new() } else { format!("WHERE 1=1{}", where_sql) };
+
+            let count_sql = format!("SELECT COUNT(*) FROM coaching_plans {}", where_clause);
+            let list_sql = format!(
+                "SELECT id, agent_id, interaction_id, created_by, created_at,
+                        coaching_theme, behavior_gap, evidence, root_cause, customer_impact,
+                        practice_activity, success_metric, follow_up_due_at,
+                        follow_up_review_count, status,
+                        acknowledged_at, acknowledged_note,
+                        closed_at, closed_outcome, escalated_at
+                 FROM coaching_plans {} ORDER BY created_at DESC LIMIT ${idx} OFFSET ${}", where_clause, idx + 1);
+
+            let total: i64 = sqlx::query_scalar(&count_sql).fetch_one(&self.pool).await?;
+
+            let mut q = sqlx::query(&list_sql);
+            if let Some(a) = agent_id { q = q.bind(a); }
+            if let Some(s) = status { q = q.bind(s); }
+            q = q.bind(limit).bind(offset);
+
+            let rows = q.fetch_all(&self.pool).await?;
+            let plans = rows.into_iter().map(|r| CoachingPlan {
+                id: r.get("id"),
+                agent_id: r.get("agent_id"),
+                interaction_id: r.get("interaction_id"),
+                created_by: r.get("created_by"),
+                created_at: r.get("created_at"),
+                coaching_theme: r.get("coaching_theme"),
+                behavior_gap: r.get("behavior_gap"),
+                evidence: r.get("evidence"),
+                root_cause: r.get("root_cause"),
+                customer_impact: r.get("customer_impact"),
+                practice_activity: r.get("practice_activity"),
+                success_metric: r.get("success_metric"),
+                follow_up_due_at: r.get("follow_up_due_at"),
+                follow_up_review_count: r.get::<i32, _>("follow_up_review_count") as u32,
+                status: r.get("status"),
+                acknowledged_at: r.get("acknowledged_at"),
+                acknowledged_note: r.get("acknowledged_note"),
+                closed_at: r.get("closed_at"),
+                closed_outcome: r.get("closed_outcome"),
+                escalated_at: r.get("escalated_at"),
+            }).collect();
+            Ok((plans, total))
+        }
+
+        /// Apply a state-machine transition. Returns Err on invalid transition.
+        /// This is the single source of truth for `coaching_plans.status` changes.
+        pub async fn transition_coaching_plan(
+            &self,
+            id: &str,
+            action: &str,
+            outcome: Option<&str>,
+            note: Option<&str>,
+        ) -> AppResult<()> {
+            let current = self
+                .get_coaching_plan(id)
+                .await?
+                .ok_or_else(|| AppError::NotFound("coaching_plan".to_string()))?;
+            let new_status = match (current.status.as_str(), action) {
+                ("draft", "submit") => "pending_acknowledgement",
+                ("pending_acknowledgement", "acknowledge") => "acknowledged",
+                ("acknowledged" | "in_progress", "verify") => "verified",
+                ("acknowledged" | "in_progress" | "verified", "close") => "closed",
+                (_, "escalate") => "escalated",
+                (s, a) => {
+                    return Err(AppError::BadRequest(format!(
+                        "invalid coaching plan transition '{a}' from '{s}'"
+                    )));
+                }
+            };
+            let q = match new_status {
+                "pending_acknowledgement" =>
+                    "UPDATE coaching_plans SET status=$1 WHERE id=$2".to_string(),
+                "acknowledged" =>
+                    "UPDATE coaching_plans SET status=$1, acknowledged_at=NOW(), acknowledged_note=$3 WHERE id=$2".to_string(),
+                "verified" =>
+                    "UPDATE coaching_plans SET status=$1 WHERE id=$2".to_string(),
+                "closed" =>
+                    "UPDATE coaching_plans SET status=$1, closed_at=NOW(), closed_outcome=$3 WHERE id=$2".to_string(),
+                "escalated" =>
+                    "UPDATE coaching_plans SET status=$1, escalated_at=NOW() WHERE id=$2".to_string(),
+                _ => unreachable!(),
+            };
+            let mut exec = sqlx::query(&q).bind(new_status).bind(id);
+            if matches!(new_status, "acknowledged") {
+                exec = exec.bind(note);
+            }
+            if new_status == "closed" {
+                exec = exec.bind(outcome.unwrap_or("improved"));
+            }
+            exec.execute(&self.pool).await?;
+            Ok(())
+        }
+
+        /// Record one follow-up measurement after a `submit_score`.
+        /// If the count reaches the plan's `follow_up_review_count`, auto-transition
+        /// the plan to `verified`.
+        pub async fn record_coaching_follow_up(
+            &self,
+            fu: &CoachingFollowUp,
+        ) -> AppResult<()> {
+            let scores_json = serde_json::to_string(&fu.criterion_scores)
+                .map_err(|e| AppError::Internal(format!("serialize criterion_scores: {e}")))?;
+            sqlx::query(
+                "INSERT INTO coaching_follow_ups
+                    (id, plan_id, interaction_id, criterion_scores, overall_score, success)
+                 VALUES ($1,$2,$3,$4::JSONB,$5,$6)"
+            )
+            .bind(&fu.id)
+            .bind(&fu.plan_id)
+            .bind(&fu.interaction_id)
+            .bind(&scores_json)
+            .bind(fu.overall_score)
+            .bind(fu.success)
+            .execute(&self.pool)
+            .await?;
+
+            // Count existing follow-ups for this plan.
+            let count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM coaching_follow_ups WHERE plan_id = $1"
+            )
+            .bind(&fu.plan_id)
+            .fetch_one(&self.pool)
+            .await?;
+
+            let plan = self
+                .get_coaching_plan(&fu.plan_id)
+                .await?
+                .ok_or_else(|| AppError::NotFound("coaching_plan".to_string()))?;
+            if count as u32 >= plan.follow_up_review_count
+                && (plan.status == "acknowledged" || plan.status == "in_progress")
+            {
+                self.transition_coaching_plan(&fu.plan_id, "verify", None, None)
+                    .await?;
+            }
+            Ok(())
+        }
+
+        pub async fn list_coaching_follow_ups(
+            &self,
+            plan_id: &str,
+        ) -> AppResult<Vec<CoachingFollowUp>> {
+            let rows = sqlx::query(
+                "SELECT id, plan_id, interaction_id, measured_at,
+                        criterion_scores, overall_score, success
+                 FROM coaching_follow_ups WHERE plan_id = $1 ORDER BY measured_at"
+            )
+            .bind(plan_id)
+            .fetch_all(&self.pool)
+            .await?;
+            let mut out = Vec::with_capacity(rows.len());
+            for r in rows {
+                let raw: String = r.get("criterion_scores");
+                let criterion_scores: std::collections::HashMap<String, f64> =
+                    serde_json::from_str(&raw).unwrap_or_default();
+                out.push(CoachingFollowUp {
+                    id: r.get("id"),
+                    plan_id: r.get("plan_id"),
+                    interaction_id: r.get("interaction_id"),
+                    measured_at: r.get("measured_at"),
+                    criterion_scores,
+                    overall_score: r.get("overall_score"),
+                    success: r.get("success"),
+                });
+            }
+            Ok(out)
+        }
+
+        /// Mark past-due plans in active states as `escalated`.
+        /// Run on demand (cheap single SQL) — wired into the coaching summary endpoint.
+        pub async fn escalate_overdue_coaching_plans(&self) -> AppResult<u64> {
+            let res = sqlx::query(
+                "UPDATE coaching_plans SET status='escalated', escalated_at=NOW()
+                 WHERE status IN ('pending_acknowledgement','acknowledged','in_progress')
+                   AND follow_up_due_at < NOW()
+                   AND escalated_at IS NULL"
+            )
+            .execute(&self.pool)
+            .await?;
+            Ok(res.rows_affected())
+        }
+
+        /// Dashboard numbers. Calls `escalate_overdue_coaching_plans` first so the
+        /// counts are accurate even without a cron.
+        pub async fn get_coaching_summary(&self) -> AppResult<CoachingSummary> {
+            let _ = self.escalate_overdue_coaching_plans().await?;
+            let active: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM coaching_plans
+                 WHERE status IN ('acknowledged','in_progress','verified')"
+            ).fetch_one(&self.pool).await?;
+            let pending_ack: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM coaching_plans WHERE status='pending_acknowledgement'"
+            ).fetch_one(&self.pool).await?;
+            let escalated: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM coaching_plans WHERE status='escalated'"
+            ).fetch_one(&self.pool).await?;
+            let avg_hours: Option<f64> = sqlx::query_scalar(
+                "SELECT AVG(EXTRACT(EPOCH FROM (acknowledged_at - created_at)) / 3600.0)
+                 FROM coaching_plans
+                 WHERE acknowledged_at IS NOT NULL
+                   AND created_at > NOW() - INTERVAL '30 days'"
+            ).fetch_one(&self.pool).await?;
+            let improvement_pct: Option<f64> = sqlx::query_scalar(
+                "SELECT
+                   100.0 * SUM(CASE WHEN closed_outcome='improved' THEN 1 ELSE 0 END)::FLOAT
+                        / NULLIF(COUNT(*) FILTER (WHERE status='closed'), 0)
+                 FROM coaching_plans
+                 WHERE closed_at > NOW() - INTERVAL '90 days'"
+            ).fetch_one(&self.pool).await?;
+            Ok(CoachingSummary {
+                active_count: active as u32,
+                pending_ack_count: pending_ack as u32,
+                escalated_count: escalated as u32,
+                avg_time_to_ack_hours: avg_hours,
+                improvement_rate_pct: improvement_pct,
+            })
+        }
+
+        /// Look up the open plan for an agent + interaction (used by submit_score).
+        pub async fn find_open_plan_for_interaction(
+            &self,
+            agent_id: &str,
+            interaction_id: &str,
+        ) -> AppResult<Option<CoachingPlan>> {
+            let row = sqlx::query(
+                "SELECT id, agent_id, interaction_id, created_by, created_at,
+                        coaching_theme, behavior_gap, evidence, root_cause, customer_impact,
+                        practice_activity, success_metric, follow_up_due_at,
+                        follow_up_review_count, status,
+                        acknowledged_at, acknowledged_note,
+                        closed_at, closed_outcome, escalated_at
+                 FROM coaching_plans
+                 WHERE agent_id = $1 AND interaction_id = $2
+                   AND status IN ('acknowledged','in_progress')
+                 LIMIT 1"
+            )
+            .bind(agent_id)
+            .bind(interaction_id)
+            .fetch_optional(&self.pool)
+            .await?;
+            Ok(row.map(|r| CoachingPlan {
+                id: r.get("id"),
+                agent_id: r.get("agent_id"),
+                interaction_id: r.get("interaction_id"),
+                created_by: r.get("created_by"),
+                created_at: r.get("created_at"),
+                coaching_theme: r.get("coaching_theme"),
+                behavior_gap: r.get("behavior_gap"),
+                evidence: r.get("evidence"),
+                root_cause: r.get("root_cause"),
+                customer_impact: r.get("customer_impact"),
+                practice_activity: r.get("practice_activity"),
+                success_metric: r.get("success_metric"),
+                follow_up_due_at: r.get("follow_up_due_at"),
+                follow_up_review_count: r.get::<i32, _>("follow_up_review_count") as u32,
+                status: r.get("status"),
+                acknowledged_at: r.get("acknowledged_at"),
+                acknowledged_note: r.get("acknowledged_note"),
+                closed_at: r.get("closed_at"),
+                closed_outcome: r.get("closed_outcome"),
+                escalated_at: r.get("escalated_at"),
+            }))
+        }
+
+        // =================== DEMO SEED ===================
 
     /// Direct SQL seed of pre-computed scores and issues for the demo
     /// dataset. Called by lib.rs after seed_demo_data() so the dashboard
