@@ -54,7 +54,17 @@ pub fn router() -> Router<AppState> {
         .route("/coaching/plans/:id/acknowledge", post(acknowledge_coaching_plan_handler))
         .route("/coaching/plans/:id/close", post(close_coaching_plan_handler))
         .route("/coaching/plans/:id/escalate", post(escalate_coaching_plan_handler))
-        .route("/coaching/summary", get(coaching_summary_handler))
+        .route("/api/coaching/summary", get(coaching_summary_handler))
+        // =================== Calibration Sessions ===================
+        .route("/api/calibration/sessions", get(list_calibration_sessions_handler))
+        .route("/api/calibration/sessions", post(create_calibration_session_handler))
+        .route("/api/calibration/sessions/{id}", get(get_calibration_session_handler))
+        .route("/api/calibration/sessions/{id}/transition", post(transition_calibration_session_handler))
+        .route("/api/calibration/sessions/{id}/score", post(submit_calibration_score_handler))
+        .route("/api/calibration/sessions/{id}/my-status", get(calibration_my_status_handler))
+        .route("/api/calibration/sessions/{id}/decisions", post(save_calibration_decisions_handler))
+        .route("/api/calibration/rubrics/{rubric_id}/history", get(calibration_rubric_history_handler))
+        .route("/api/calibration/summary", get(calibration_summary_handler))
 }
 
 pub async fn serve_index() -> impl IntoResponse {
@@ -755,4 +765,200 @@ pub async fn coaching_summary_handler(
 ) -> AppResult<Json<serde_json::Value>> {
     let summary = state.store.get_coaching_summary().await?;
     Ok(ok(summary))
+}
+
+// ============ Calibration Sessions ============
+
+#[derive(Deserialize)]
+pub struct CalibrationListQuery {
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub rubric_id: Option<String>,
+    #[serde(default)]
+    pub offset: Option<i64>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+pub async fn list_calibration_sessions_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CalibrationListQuery>,
+) -> AppResult<Json<serde_json::Value>> {
+    let limit = q.limit.unwrap_or(25).max(1).min(200);
+    let offset = q.offset.unwrap_or(0).max(0);
+    let (items, total) = state.store
+        .list_calibration_sessions(q.status.as_deref(), q.rubric_id.as_deref(), limit, offset)
+        .await?;
+    Ok(Json(serde_json::json!({ "items": items, "total": total, "offset": offset, "limit": limit })))
+}
+
+pub async fn create_calibration_session_handler(
+    State(state): State<AppState>,
+    Extension(user): Extension<Arc<CurrentUser>>,
+    Json(body): Json<serde_json::Value>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden("admin only".into()));
+    }
+    let session = CalibrationSession {
+        id: state.store.next_id("calibration_sessions").await?,
+        name: body["name"].as_str().unwrap_or("").to_string(),
+        status: "draft".to_string(),
+        rubric_id: body["rubric_id"].as_str().unwrap_or("").to_string(),
+        reviewer_usernames: body["reviewer_usernames"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str()).map(String::from).collect())
+            .unwrap_or_default(),
+        sample_interaction_ids: body["sample_interaction_ids"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str()).map(String::from).collect())
+            .unwrap_or_default(),
+        target_agreement_rate: body["target_agreement_rate"].as_f64(),
+        min_reviewers_per_interaction: body["min_reviewers_per_interaction"].as_u64().unwrap_or(2) as u32,
+        deadline_at: body["deadline_at"].as_str()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&Utc))
+            .ok_or_else(|| AppError::BadRequest("deadline_at is required".into()))?,
+        meeting_started_at: None,
+        facilitator_id: Some(user.username.clone()),
+        agreement_rate: None,
+        variance_per_criterion: None,
+        created_at: Utc::now(),
+    };
+    state.store.create_calibration_session(&session).await?;
+    Ok(created(session))
+}
+
+pub async fn get_calibration_session_handler(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    let session = state.store.get_calibration_session(&session_id).await?
+        .ok_or_else(|| AppError::NotFound("calibration_session".to_string()))?;
+    Ok(ok(session))
+}
+
+pub async fn transition_calibration_session_handler(
+    State(state): State<AppState>,
+    Extension(user): Extension<Arc<CurrentUser>>,
+    Path(session_id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden("admin only".into()));
+    }
+    let to_status = body["to_status"].as_str().ok_or_else(|| AppError::BadRequest("to_status required".into()))?;
+    let mut session = state.store.get_calibration_session(&session_id).await?
+        .ok_or_else(|| AppError::NotFound("calibration_session".to_string()))?;
+    match to_status {
+        "start" => { if session.status != "draft" { return Err(AppError::BadRequest("only draft can start".into())); } session.status = "scoring".to_string(); }
+        "begin-meeting" => { if session.status != "scoring" { return Err(AppError::BadRequest("must be scoring".into())); } session.status = "in_session".to_string(); session.meeting_started_at = Some(Utc::now()); }
+        "complete" => {
+            if session.status != "in_session" { return Err(AppError::BadRequest("must be in_session".into())); }
+            let (rate, variance) = state.store.compute_calibration_summary(&session_id).await?;
+            session.agreement_rate = rate;
+            session.variance_per_criterion = variance;
+            session.status = "completed".to_string();
+        }
+        "cancel" => { session.status = "cancelled".to_string(); }
+        _ => return Err(AppError::BadRequest(format!("invalid status: {}", to_status))),
+    }
+    state.store.create_calibration_session(&session).await?; // update via upsert
+    Ok(ok(session))
+}
+
+pub async fn submit_calibration_score_handler(
+    State(state): State<AppState>,
+    Extension(user): Extension<Arc<CurrentUser>>,
+    Path(session_id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> AppResult<Json<serde_json::Value>> {
+    let session = state.store.get_calibration_session(&session_id).await?
+        .ok_or_else(|| AppError::NotFound("calibration_session".to_string()))?;
+    if !session.reviewer_usernames.contains(&user.username) {
+        return Err(AppError::Forbidden("not a reviewer".into()));
+    }
+    let interaction_id = body["interaction_id"].as_str().ok_or_else(|| AppError::BadRequest("interaction_id required".into()))?;
+    let criterion_scores: serde_json::Map<String, serde_json::Value> = body["criterion_scores"]
+        .as_object().cloned().ok_or_else(|| AppError::BadRequest("criterion_scores required".into()))?;
+    let overall_score: f64 = body["overall_score"].as_f64().ok_or_else(|| AppError::BadRequest("overall_score required".into()))?;
+    let notes = body["notes"].as_str().map(String::from);
+    let score = CalibrationScore {
+        id: format!("{}-{}-{}", session_id, interaction_id, user.username),
+        session_id: session_id.clone(),
+        interaction_id: interaction_id.to_string(),
+        reviewer: user.username.clone(),
+        submitted_at: Utc::now(),
+        criterion_scores: criterion_scores.into(),
+        overall_score,
+        notes,
+    };
+    state.store.submit_calibration_score(&score).await?;
+    Ok(ok(serde_json::json!({ "submitted": true })))
+}
+
+pub async fn calibration_my_status_handler(
+    State(state): State<AppState>,
+    Extension(user): Extension<Arc<CurrentUser>>,
+    Path(session_id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    let (submitted, total) = state.store.get_my_submission_status(&session_id, &user.username).await?;
+    Ok(ok(serde_json::json!({ "submitted_count": submitted, "total_expected": total })))
+}
+
+pub async fn save_calibration_decisions_handler(
+    State(state): State<AppState>,
+    Extension(user): Extension<Arc<CurrentUser>>,
+    Path(session_id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden("admin only".into()));
+    }
+    let decisions: Vec<serde_json::Value> = body["decisions"].as_array()
+        .ok_or_else(|| AppError::BadRequest("decisions array required".into()))?;
+    for d in decisions {
+        let decision = CalibrationDecision {
+            id: format!("{}-{}-{}", session_id, d["criterion_id"], Utc::now().timestamp()),
+            session_id: session_id.clone(),
+            criterion_id: d["criterion_id"].as_str().ok_or_else(|| AppError::BadRequest("criterion_id required".into()))?.to_string(),
+            agreed_interpretation: d["agreed_interpretation"].as_str().ok_or_else(|| AppError::BadRequest("agreed_interpretation required".into()))?.to_string(),
+            example_interaction_id: d["example_interaction_id"].as_str().map(String::from),
+            rubric_edit_proposed: d["rubric_edit_proposed"].as_str().map(String::from),
+            created_at: Utc::now(),
+        };
+        state.store.save_calibration_decisions(&decision).await?;
+    }
+    Ok(ok(serde_json::json!({ "saved": decisions.len() })))
+}
+
+pub async fn calibration_rubric_history_handler(
+    State(state): State<AppState>,
+    Path(rubric_id): Path<String>,
+    Query(q): Query<CalibrationListQuery>,
+) -> AppResult<Json<serde_json::Value>> {
+    let limit = q.limit.unwrap_or(25).max(1).min(200);
+    let offset = q.offset.unwrap_or(0).max(0);
+    let (decisions, total) = state.store.get_rubric_decision_history(&rubric_id, limit, offset).await?;
+    Ok(Json(serde_json::json!({ "decisions": decisions, "total": total })))
+}
+
+pub async fn calibration_summary_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CalibrationListQuery>,
+) -> AppResult<Json<serde_json::Value>> {
+    let sessions = state.store.list_calibration_sessions(q.status.as_deref(), None, 100, 0).await?.0;
+    let mut trend = Vec::new();
+    for s in sessions {
+        if s.status == "completed" && s.agreement_rate.is_some() {
+            trend.push(serde_json::json!({
+                "date": s.created_at.format("%Y-%m-%d").to_string(),
+                "agreement_rate": s.agreement_rate,
+                "variance": s.variance_per_criterion
+            }));
+        }
+    }
+    trend.sort_by(|a, b| b["date"].as_str().cmp(&a["date"].as_str()));
+    Ok(ok(serde_json::json!({ "trend": trend })))
 }
