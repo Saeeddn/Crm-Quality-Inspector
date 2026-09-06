@@ -557,3 +557,108 @@ pub struct ListQuery {
     #[serde(default)]
     pub page: Option<i64>,
 }
+
+// =====================
+// Coaching Plan (Closed-Loop QA)
+// =====================
+
+/// Lifecycle of a coaching plan.
+    /// draft → pending_acknowledgement → (acknowledged → in_progress) →
+    ///   (verified → closed) | escalated
+    /// The arrow to `escalated` can fire from any state when the due-date
+    /// passes without acknowledgement or closure.
+    #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+    #[serde(rename_all = "snake_case")]
+    pub enum CoachingPlanStatus {
+        Draft,
+        PendingAcknowledgement,
+        Acknowledged,
+        InProgress,
+        Verified,
+        Closed,
+        Escalated,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct CoachingPlan {
+        pub id: String,
+        pub agent_id: String,
+        pub interaction_id: String,
+        pub created_by: String,
+        pub created_at: DateTime<Utc>,
+        pub coaching_theme: String,
+        pub behavior_gap: String,
+        pub evidence: String,
+        pub root_cause: String,
+        pub customer_impact: String,
+        pub practice_activity: String,
+        pub success_metric: String,
+        pub follow_up_due_at: DateTime<Utc>,
+        pub follow_up_review_count: u32,
+        pub status: String,
+        pub acknowledged_at: Option<DateTime<Utc>>,
+        pub acknowledged_note: Option<String>,
+        pub closed_at: Option<DateTime<Utc>>,
+        pub closed_outcome: Option<String>,
+        pub escalated_at: Option<DateTime<Utc>>,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct CoachingPlanCreate {
+        pub agent_id: String,
+        pub interaction_id: String,
+        pub coaching_theme: String,
+        pub behavior_gap: String,
+        pub evidence: String,
+        pub root_cause: String,
+        pub customer_impact: String,
+        pub practice_activity: String,
+        pub success_metric: String,
+        pub follow_up_due_at: DateTime<Utc>,
+        pub follow_up_review_count: u32,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct CoachingPlanPatch {
+        pub coaching_theme: Option<String>,
+        pub behavior_gap: Option<String>,
+        pub evidence: Option<String>,
+        pub root_cause: Option<String>,
+        pub customer_impact: Option<String>,
+        pub practice_activity: Option<String>,
+        pub success_metric: Option<String>,
+        pub follow_up_due_at: Option<DateTime<Utc>>,
+        pub follow_up_review_count: Option<u32>,
+        pub status: Option<String>,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct AcknowledgeRequest {
+        pub note: Option<String>,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct CloseRequest {
+        pub outcome: String,
+        pub note: Option<String>,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct CoachingFollowUp {
+        pub id: String,
+        pub plan_id: String,
+        pub interaction_id: String,
+        pub measured_at: DateTime<Utc>,
+        pub criterion_scores: std::collections::HashMap<String, f64>,
+        pub overall_score: f64,
+        pub success: bool,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct CoachingSummary {
+        pub active_count: u32,
+        pub pending_ack_count: u32,
+        pub escalated_count: u32,
+        pub avg_time_to_ack_hours: Option<f64>,
+        pub improvement_rate_pct: Option<f64>,
+    }

@@ -123,19 +123,54 @@ impl Store {
                 pattern TEXT,
                 threshold DOUBLE PRECISION,
                 ratio_total_pattern TEXT,
-                weight DOUBLE PRECISION NOT NULL DEFAULT 1.0,
-                critical BOOLEAN NOT NULL DEFAULT FALSE,
-                active BOOLEAN NOT NULL DEFAULT TRUE,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )",
-        ];
+                                weight DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+                                critical BOOLEAN NOT NULL DEFAULT FALSE,
+                                active BOOLEAN NOT NULL DEFAULT TRUE,
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                            )",
+                            "CREATE TABLE IF NOT EXISTS coaching_plans (
+                                id TEXT PRIMARY KEY,
+                                agent_id TEXT NOT NULL,
+                                interaction_id TEXT NOT NULL,
+                                created_by TEXT NOT NULL,
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                                coaching_theme TEXT NOT NULL,
+                                behavior_gap TEXT NOT NULL,
+                                evidence TEXT NOT NULL,
+                                root_cause TEXT NOT NULL,
+                                customer_impact TEXT NOT NULL,
+                                practice_activity TEXT NOT NULL,
+                                success_metric TEXT NOT NULL,
+                                follow_up_due_at TIMESTAMPTZ NOT NULL,
+                                follow_up_review_count INTEGER NOT NULL DEFAULT 3,
+                                status TEXT NOT NULL DEFAULT 'draft',
+                                acknowledged_at TIMESTAMPTZ,
+                                acknowledged_note TEXT,
+                                closed_at TIMESTAMPTZ,
+                                closed_outcome TEXT,
+                                escalated_at TIMESTAMPTZ
+                            )",
+                            "CREATE INDEX IF NOT EXISTS idx_coaching_plans_agent_status
+                                ON coaching_plans (agent_id, status)",
+                            "CREATE TABLE IF NOT EXISTS coaching_follow_ups (
+                                id TEXT PRIMARY KEY,
+                                plan_id TEXT NOT NULL REFERENCES coaching_plans(id) ON DELETE CASCADE,
+                                interaction_id TEXT NOT NULL,
+                                measured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                                criterion_scores JSONB NOT NULL,
+                                overall_score DOUBLE PRECISION NOT NULL,
+                                success BOOLEAN NOT NULL
+                            )",
+                            "CREATE INDEX IF NOT EXISTS idx_coaching_follow_ups_plan
+                                ON coaching_follow_ups (plan_id)",
+                        ];
         for sql in stmts {
             sqlx::query(sql).execute(&self.pool).await?;
         }
         // Sequences for clean sequential ids. Each starts at 1000 so the
         // demo data has recognisable ids (1001, 1002, ...). The Store
         // layer reads nextval() and assigns the value as a TEXT id.
-        for tbl in ["agents", "customers", "interactions", "rubrics", "scores", "issues", "metrics", "kpis"] {
+        for tbl in ["agents", "customers", "interactions", "rubrics", "scores", "issues", "metrics", "kpis", "coaching_plans", "coaching_follow_ups"] {
             sqlx::query(&format!(
                 "CREATE SEQUENCE IF NOT EXISTS {tbl}_id_seq START 1000"
             ))

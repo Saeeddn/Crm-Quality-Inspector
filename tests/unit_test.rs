@@ -9,9 +9,9 @@
 
 use crm_qi::auth::{hash_password, verify_password, SessionStore};
 use crm_qi::models::{
-    Agent, CreateAgentRequest, CreateCustomerRequest, CreateInteractionRequest, Customer,
-    Interaction, Issue, ListQuery, MeasurementInput, Rubric, RubricCriterion, Score, ScoreRequest,
-    User,
+    Agent, CoachingPlan, CoachingPlanCreate, CoachingPlanPatch, CoachingPlanStatus, CreateAgentRequest,
+    CreateCustomerRequest, CreateInteractionRequest, Customer, Interaction, Issue, ListQuery,
+    MeasurementInput, Rubric, RubricCriterion, Score, ScoreRequest, User,
 };
 
 // -------------------- Model serde round-trips --------------------
@@ -329,4 +329,59 @@ fn password_hash_is_deterministic() {
     let h1 = hash_password(pw).unwrap();
     let h2 = hash_password(pw).unwrap();
     assert_eq!(h1, h2, "SHA-256 hashes must be deterministic for the same input");
+}
+
+// -------------------- Coaching Plan serde --------------------
+
+#[test]
+fn coaching_status_serializes_snake_case() {
+    let s = serde_json::to_string(&CoachingPlanStatus::PendingAcknowledgement).unwrap();
+    assert_eq!(s, "\"pending_acknowledgement\"");
+}
+
+#[test]
+fn coaching_status_round_trip() {
+    use crm_qi::models::CoachingPlanStatus::*;
+    for v in [
+        Draft,
+        PendingAcknowledgement,
+        Acknowledged,
+        InProgress,
+        Verified,
+        Closed,
+        Escalated,
+    ] {
+        let s = serde_json::to_string(&v).unwrap();
+        let back: CoachingPlanStatus = serde_json::from_str(&s).unwrap();
+        assert_eq!(v, back, "round-trip failed for variant {v:?}");
+    }
+}
+
+#[test]
+fn coaching_plan_patch_partial_fields() {
+    let p: CoachingPlanPatch = serde_json::from_str(r#"{"behavior_gap":"new gap"}"#).unwrap();
+    assert_eq!(p.behavior_gap.as_deref(), Some("new gap"));
+    assert!(p.evidence.is_none());
+    assert!(p.coaching_theme.is_none());
+    assert!(p.status.is_none());
+}
+
+#[test]
+fn coaching_plan_create_requires_all_evidence_fields() {
+    let raw = r#"{
+        "agent_id":"1001",
+        "interaction_id":"1010",
+        "coaching_theme":"همدلی",
+        "behavior_gap":"gap",
+        "evidence":"ev",
+        "root_cause":"r",
+        "customer_impact":"i",
+        "practice_activity":"p",
+        "success_metric":"≥80",
+        "follow_up_due_at":"2026-10-01T00:00:00Z",
+        "follow_up_review_count":3
+    }"#;
+    let p: CoachingPlanCreate = serde_json::from_str(raw).unwrap();
+    assert_eq!(p.coaching_theme, "همدلی");
+    assert_eq!(p.follow_up_review_count, 3);
 }
