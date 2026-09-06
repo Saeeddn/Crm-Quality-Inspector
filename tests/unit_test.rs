@@ -9,9 +9,10 @@
 
 use crm_qi::auth::{hash_password, verify_password, SessionStore};
 use crm_qi::models::{
-    Agent, CoachingPlan, CoachingPlanCreate, CoachingPlanPatch, CoachingPlanStatus, CreateAgentRequest,
-    CreateCustomerRequest, CreateInteractionRequest, Customer, Interaction, Issue, ListQuery,
-    MeasurementInput, Rubric, RubricCriterion, Score, ScoreRequest, User,
+    Agent, CalibrationDecision, CalibrationScore, CalibrationSession,
+    CalibrationSessionStatus, CoachingPlan, CoachingPlanCreate, CoachingPlanPatch, CoachingPlanStatus,
+    CreateAgentRequest, CreateCustomerRequest, CreateInteractionRequest, Customer, Interaction,
+    Issue, ListQuery, MeasurementInput, Rubric, RubricCriterion, Score, ScoreRequest, User,
 };
 
 // -------------------- Model serde round-trips --------------------
@@ -384,4 +385,77 @@ fn coaching_plan_create_requires_all_evidence_fields() {
     let p: CoachingPlanCreate = serde_json::from_str(raw).unwrap();
     assert_eq!(p.coaching_theme, "همدلی");
     assert_eq!(p.follow_up_review_count, 3);
+}
+
+// ==================== Calibration Models ====================
+
+#[test]
+fn calibration_session_serde_roundtrip() {
+    use crm_qi::models::CalibrationSession;
+    let s = CalibrationSession {
+        id: "cal-1".into(),
+        name: "تطبیق پاییز ۱۴۰۵".into(),
+        status: "draft".into(),
+        rubric_id: "rb-1".into(),
+        reviewer_usernames: vec!["admin".into(), "sara".into()],
+        sample_interaction_ids: vec!["in-1".into(), "in-2".into()],
+        target_agreement_rate: Some(80.0),
+        min_reviewers_per_interaction: 2,
+        deadline_at: chrono::Utc::now(),
+        meeting_started_at: None,
+        facilitator_id: Some("admin".into()),
+        agreement_rate: None,
+        variance_per_criterion: None,
+        created_at: chrono::Utc::now(),
+    };
+    let json = serde_json::to_string(&s).unwrap();
+    let back: CalibrationSession = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.id, "cal-1");
+    assert_eq!(back.reviewer_usernames.len(), 2);
+}
+
+#[test]
+fn calibration_score_serde_roundtrip() {
+    use crm_qi::models::CalibrationScore;
+    let s = CalibrationScore {
+        id: "cs-1".into(),
+        session_id: "cal-1".into(),
+        interaction_id: "in-1".into(),
+        reviewer: "admin".into(),
+        submitted_at: chrono::Utc::now(),
+        criterion_scores: serde_json::json!({"cmp-compliance": 95.0}),
+        overall_score: 90.0,
+        notes: Some("عالی".into()),
+    };
+    let json = serde_json::to_string(&s).unwrap();
+    let back: CalibrationScore = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.reviewer, "admin");
+    assert_eq!(back.overall_score, 90.0);
+}
+
+#[test]
+fn calibration_decision_serde_roundtrip() {
+    use crm_qi::models::CalibrationDecision;
+    let d = CalibrationDecision {
+        id: "cd-1".into(),
+        session_id: "cal-1".into(),
+        criterion_id: "cmp-compliance".into(),
+        agreed_interpretation: "احراز هویت با کد ملی کافیست".into(),
+        example_interaction_id: Some("in-3".into()),
+        rubric_edit_proposed: None,
+        created_at: chrono::Utc::now(),
+    };
+    let json = serde_json::to_string(&d).unwrap();
+    let back: CalibrationDecision = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.agreed_interpretation, "احراز هویت با کد ملی کافیست");
+}
+
+#[test]
+fn calibration_status_round_trip() {
+    use crm_qi::models::CalibrationSessionStatus::*;
+    for v in [Draft, Scoring, InSession, Completed, Cancelled] {
+        let s = serde_json::to_string(&v).unwrap();
+        let back: CalibrationSessionStatus = serde_json::from_str(&s).unwrap();
+        assert_eq!(v, back, "round-trip failed for {v:?}");
+    }
 }

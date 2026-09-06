@@ -163,6 +163,46 @@ impl Store {
                             )",
                             "CREATE INDEX IF NOT EXISTS idx_coaching_follow_ups_plan
                                 ON coaching_follow_ups (plan_id)",
+                            // =================== Calibration Sessions ===================
+                            "CREATE TABLE IF NOT EXISTS calibration_sessions (
+                                id TEXT PRIMARY KEY,
+                                name TEXT NOT NULL,
+                                status TEXT NOT NULL DEFAULT 'draft',
+                                rubric_id TEXT NOT NULL,
+                                reviewer_usernames JSONB NOT NULL DEFAULT '[]'::jsonb,
+                                sample_interaction_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                                target_agreement_rate DOUBLE PRECISION,
+                                min_reviewers_per_interaction INTEGER NOT NULL DEFAULT 2,
+                                deadline_at TIMESTAMPTZ NOT NULL,
+                                meeting_started_at TIMESTAMPTZ,
+                                facilitator_id TEXT,
+                                agreement_rate DOUBLE PRECISION,
+                                variance_per_criterion JSONB,
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                            )",
+                            "CREATE TABLE IF NOT EXISTS calibration_scores (
+                                id TEXT PRIMARY KEY,
+                                session_id TEXT NOT NULL REFERENCES calibration_sessions(id) ON DELETE CASCADE,
+                                interaction_id TEXT NOT NULL,
+                                reviewer TEXT NOT NULL,
+                                submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                                criterion_scores JSONB NOT NULL,
+                                overall_score DOUBLE PRECISION NOT NULL,
+                                notes TEXT,
+                                UNIQUE(session_id, interaction_id, reviewer)
+                            )",
+                            "CREATE INDEX IF NOT EXISTS idx_calibration_scores_session
+                                ON calibration_scores (session_id)",
+                            "CREATE TABLE IF NOT EXISTS calibration_decisions (
+                                id TEXT PRIMARY KEY,
+                                session_id TEXT NOT NULL REFERENCES calibration_sessions(id) ON DELETE CASCADE,
+                                criterion_id TEXT NOT NULL,
+                                agreed_interpretation TEXT NOT NULL,
+                                example_interaction_id TEXT,
+                                rubric_edit_proposed TEXT,
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                                UNIQUE(session_id, criterion_id)
+                            )",
                         ];
         for sql in stmts {
             sqlx::query(sql).execute(&self.pool).await?;
@@ -170,7 +210,7 @@ impl Store {
         // Sequences for clean sequential ids. Each starts at 1000 so the
         // demo data has recognisable ids (1001, 1002, ...). The Store
         // layer reads nextval() and assigns the value as a TEXT id.
-        for tbl in ["agents", "customers", "interactions", "rubrics", "scores", "issues", "metrics", "kpis", "coaching_plans", "coaching_follow_ups"] {
+        for tbl in ["agents", "customers", "interactions", "rubrics", "scores", "issues", "metrics", "kpis", "coaching_plans", "coaching_follow_ups", "calibration_sessions", "calibration_scores", "calibration_decisions"] {
             sqlx::query(&format!(
                 "CREATE SEQUENCE IF NOT EXISTS {tbl}_id_seq START 1000"
             ))
@@ -183,7 +223,7 @@ impl Store {
 
     /// Allocate a fresh id from a per-table sequence. Returns a numeric
     /// string ("1001", "1002", ...) used as the entity id.
-    async fn next_id(&self, seq: &str) -> AppResult<String> {
+    pub async fn next_id(&self, seq: &str) -> AppResult<String> {
         let row = sqlx::query(&format!("SELECT nextval('{seq}')::TEXT AS id"))
             .fetch_one(&self.pool)
             .await?;
@@ -1326,6 +1366,280 @@ impl Store {
                 closed_outcome: r.get("closed_outcome"),
                 escalated_at: r.get("escalated_at"),
             }))
+        }
+
+        // =================== CALIBRATION SESSIONS ===================
+
+        pub async fn create_calibration_session(&self, s: &CalibrationSession) -> AppResult<()> {
+            let reviewer_json = serde_json::to_string(&s.reviewer_usernames)
+                .map_err(|e| AppError::Internal(format!("serialize reviewer_usernames: {e}")))?;
+            let sample_json = serde_json::to_string(&s.sample_interaction_ids)
+                .map_err(|e| AppError::Internal(format!("serialize sample_interaction_ids: {e}")))?;
+            sqlx::query(
+                "INSERT INTO calibration_sessions
+                    (id, name, status, rubric_id, reviewer_usernames, sample_interaction_ids,
+                     target_agreement_rate, min_reviewers_per_interaction, deadline_at,
+                     facilitator_id, created_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)"
+            )
+            .bind(&s.id)
+            .bind(&s.name)
+            .bind(&s.status)
+            .bind(&s.rubric_id)
+            .bind(reviewer_json.as_str())
+            .bind(sample_json.as_str())
+            .bind(s.target_agreement_rate)
+            .bind(s.min_reviewers_per_interaction as i32)
+            .bind(&s.deadline_at)
+            .bind(&s.facilitator_id)
+            .bind(&s.created_at)
+            .execute(&self.pool).await?;
+            Ok(())
+        }
+
+        pub async fn get_calibration_session(&self, id: &str) -> AppResult<Option<CalibrationSession>> {
+            let row = sqlx::query(
+                "SELECT * FROM calibration_sessions WHERE id = $1"
+            )
+            .bind(id)
+            .fetch_optional(&self.pool).await?;
+            Ok(row.map(|r| CalibrationSession {
+                id: r.get("id"),
+                name: r.get("name"),
+                status: r.get("status"),
+                rubric_id: r.get("rubric_id"),
+                reviewer_usernames: { let raw: String = r.get("reviewer_usernames"); serde_json::from_str(&raw).unwrap_or_default() },
+                sample_interaction_ids: { let raw: String = r.get("sample_interaction_ids"); serde_json::from_str(&raw).unwrap_or_default() },
+                target_agreement_rate: r.get("target_agreement_rate"),
+                min_reviewers_per_interaction: r.get::<i32, _>("min_reviewers_per_interaction") as u32,
+                deadline_at: r.get("deadline_at"),
+                meeting_started_at: r.get("meeting_started_at"),
+                facilitator_id: r.get("facilitator_id"),
+                agreement_rate: r.get("agreement_rate"),
+                variance_per_criterion: r.get("variance_per_criterion"),
+                created_at: r.get("created_at"),
+            }))
+        }
+
+        pub async fn list_calibration_sessions(
+            &self,
+            status: Option<&str>,
+            rubric_id: Option<&str>,
+            limit: i64,
+            offset: i64,
+        ) -> AppResult<(Vec<CalibrationSession>, i64)> {
+            let mut where_sql = String::new();
+            let mut params: Vec<(i32, &str)> = Vec::new();
+            let mut idx = 1i32;
+            if let Some(st) = status {
+                where_sql.push_str(&format!(" AND status = ${idx}"));
+                params.push((idx, st));
+                idx += 1;
+            }
+            if let Some(rubric) = rubric_id {
+                where_sql.push_str(&format!(" AND rubric_id = ${idx}"));
+                params.push((idx, rubric));
+                idx += 1;
+            }
+            let total: i64 = sqlx::query_scalar(
+                &format!("SELECT COUNT(*) FROM calibration_sessions WHERE 1=1 {where_sql}",)
+            )
+            .fetch_one(&self.pool).await?;
+            let mut q = sqlx::query(
+                &format!(
+                    "SELECT * FROM calibration_sessions WHERE 1=1 {where_sql}
+                     ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+                )
+            );
+            for (pidx, val) in &params {
+                q = q.bind(val);
+            }
+            q = q.bind(limit).bind(offset);
+            let rows = q.fetch_all(&self.pool).await?;
+            let sessions = rows.into_iter().map(|r| CalibrationSession {
+                id: r.get("id"),
+                name: r.get("name"),
+                status: r.get("status"),
+                rubric_id: r.get("rubric_id"),
+                reviewer_usernames: { let raw: String = r.get("reviewer_usernames"); serde_json::from_str(&raw).unwrap_or_default() },
+                sample_interaction_ids: { let raw: String = r.get("sample_interaction_ids"); serde_json::from_str(&raw).unwrap_or_default() },
+                target_agreement_rate: r.get("target_agreement_rate"),
+                min_reviewers_per_interaction: r.get::<i32, _>("min_reviewers_per_interaction") as u32,
+                deadline_at: r.get("deadline_at"),
+                meeting_started_at: r.get("meeting_started_at"),
+                facilitator_id: r.get("facilitator_id"),
+                agreement_rate: r.get("agreement_rate"),
+                variance_per_criterion: r.get("variance_per_criterion"),
+                created_at: r.get("created_at"),
+            }).collect();
+            Ok((sessions, total))
+        }
+
+        pub async fn submit_calibration_score(&self, s: &CalibrationScore) -> AppResult<()> {
+            let scores_json = serde_json::to_string(&s.criterion_scores)
+                .map_err(|e| AppError::Internal(format!("serialize criterion_scores: {e}")))?;
+            sqlx::query(
+                "INSERT INTO calibration_scores
+                    (id, session_id, interaction_id, reviewer, submitted_at,
+                     criterion_scores, overall_score, notes)
+                 VALUES ($1,$2,$3,$4,$5,$6::JSONB,$7,$8)
+                 ON CONFLICT (session_id, interaction_id, reviewer)
+                 DO UPDATE SET criterion_scores = $6::JSONB, overall_score = $7, notes = $8"
+            )
+            .bind(&s.id)
+            .bind(&s.session_id)
+            .bind(&s.interaction_id)
+            .bind(&s.reviewer)
+            .bind(&s.submitted_at)
+            .bind(scores_json.as_str())
+            .bind(s.overall_score)
+            .bind(&s.notes)
+            .execute(&self.pool).await?;
+            Ok(())
+        }
+
+        pub async fn get_my_submission_status(
+            &self,
+            session_id: &str,
+            reviewer: &str,
+        ) -> AppResult<(u32, u32)> {
+            let submitted: i64 = sqlx::query_scalar(
+                "SELECT COUNT(DISTINCT interaction_id) FROM calibration_scores
+                 WHERE session_id = $1 AND reviewer = $2"
+            )
+            .bind(session_id)
+            .bind(reviewer)
+            .fetch_one(&self.pool).await?;
+            let total: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*)::int FROM unnest($1::text[]) t"
+            )
+            .bind("sample_placeholder")
+            .fetch_one(&self.pool).await?;
+            Ok((submitted as u32, (total.max(1)) as u32))
+        }
+
+        pub async fn save_calibration_decisions(&self, d: &CalibrationDecision) -> AppResult<()> {
+            let example = d.example_interaction_id.as_deref().unwrap_or("");
+            sqlx::query(
+                "INSERT INTO calibration_decisions
+                    (id, session_id, criterion_id, agreed_interpretation,
+                     example_interaction_id, rubric_edit_proposed, created_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)
+                 ON CONFLICT (session_id, criterion_id)
+                 DO UPDATE SET agreed_interpretation = $4,
+                               example_interaction_id = $5,
+                               rubric_edit_proposed = $6"
+            )
+            .bind(&d.id)
+            .bind(&d.session_id)
+            .bind(&d.criterion_id)
+            .bind(&d.agreed_interpretation)
+            .bind(example)
+            .bind(d.rubric_edit_proposed.as_deref().unwrap_or(""))
+            .bind(&d.created_at)
+            .execute(&self.pool).await?;
+            Ok(())
+        }
+
+        pub async fn compute_calibration_summary(&self, session_id: &str) -> AppResult<(Option<f64>, Option<serde_json::Value>)> {
+            let scores = sqlx::query(
+                "SELECT interaction_id, criterion_scores, overall_score
+                 FROM calibration_scores WHERE session_id = $1"
+            )
+            .bind(session_id)
+            .fetch_all(&self.pool).await?;
+            // Group by interaction_id
+            let mut by_interaction: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+            for r in &scores {
+                let iid: String = r.get("interaction_id");
+                let raw: String = r.get("criterion_scores");
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
+                    if val.is_object() {
+                        by_interaction.entry(iid).or_insert_with(Vec::new).push(val);
+                    }
+                }
+            }
+            let mut variance_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+            let mut total_criteria = 0u32;
+            let mut agreements = 0u32;
+            for (_iid, groups) in by_interaction {
+                if groups.len() < 2 { continue; }
+                // Collect all criterion IDs across all groups for this interaction
+                let mut all_criterion_ids: Vec<String> = Vec::new();
+                for g in &groups {
+                    if let Some(obj) = g.as_object() {
+                        all_criterion_ids.extend(obj.keys().cloned());
+                    }
+                }
+                all_criterion_ids.sort();
+                all_criterion_ids.dedup();
+                for cid in &all_criterion_ids {
+                    let values: Vec<f64> = groups.iter()
+                        .filter_map(|g| g.as_object().and_then(|o| o.get(cid)).and_then(|v| v.as_f64()))
+                        .collect();
+                    if values.len() < 2 { continue; }
+                    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+                    let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                    let variance = max - min;
+                    variance_map.insert(cid.clone(), serde_json::json!({
+                        "max": (max * 10.0).round() / 10.0,
+                        "min": (min * 10.0).round() / 10.0,
+                        "variance": (variance * 10.0).round() / 10.0
+                    }));
+                    total_criteria += 1;
+                    if variance.abs() < 0.01 { agreements += 1; }
+                }
+            }
+            let agreement_rate = if total_criteria > 0 {
+                Some(agreements as f64 / total_criteria as f64 * 100.0)
+            } else { None };
+            Ok((agreement_rate, Some(serde_json::json!(variance_map))))
+        }
+
+        pub async fn get_rubric_decision_history(
+            &self,
+            rubric_id: &str,
+            limit: i64,
+            offset: i64,
+        ) -> AppResult<(Vec<CalibrationDecision>, i64)> {
+            // Get all sessions for this rubric
+            let session_ids: Vec<String> = sqlx::query_scalar(
+                "SELECT id FROM calibration_sessions WHERE rubric_id = $1
+                 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+            )
+            .bind(rubric_id)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool).await?;
+            if session_ids.is_empty() { return Ok((vec![], 0)); }
+            let placeholders: Vec<String> = (1..=session_ids.len()).map(|i| format!("${i}")).collect();
+            let placeholders_str = placeholders.join(",");
+            let query = format!(
+                "SELECT * FROM calibration_decisions WHERE session_id IN ({})
+                 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
+                placeholders_str
+            );
+            let mut q = sqlx::query(&query);
+            for sid in &session_ids { q = q.bind(sid); }
+            q = q.bind(limit).bind(offset);
+            let rows = q.fetch_all(&self.pool).await?;
+            let total: i64 = sqlx::query_scalar(
+                &format!(
+                    "SELECT COUNT(*) FROM calibration_decisions WHERE session_id IN ({})",
+                    placeholders_str
+                )
+            )
+            .fetch_one(&self.pool).await?;
+            let decisions = rows.into_iter().map(|r| CalibrationDecision {
+                id: r.get("id"),
+                session_id: r.get("session_id"),
+                criterion_id: r.get("criterion_id"),
+                agreed_interpretation: r.get("agreed_interpretation"),
+                example_interaction_id: r.get("example_interaction_id"),
+                rubric_edit_proposed: r.get("rubric_edit_proposed"),
+                created_at: r.get("created_at"),
+            }).collect();
+            Ok((decisions, total))
         }
 
         // =================== DEMO SEED ===================

@@ -662,3 +662,65 @@ pub struct ListQuery {
         pub avg_time_to_ack_hours: Option<f64>,
         pub improvement_rate_pct: Option<f64>,
     }
+
+    // =====================
+    // Calibration Session
+    // =====================
+
+    #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+    #[serde(rename_all = "snake_case")]
+    pub enum CalibrationSessionStatus {
+        Draft,
+        Scoring,
+        InSession,
+        Completed,
+        Cancelled,
+    }
+
+    impl std::fmt::Display for CalibrationSessionStatus {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let s = format!("{:?}", self).to_lowercase();
+            write!(f, "{}", s)
+        }
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct CalibrationSession {
+        pub id: String,
+        pub name: String,
+        pub status: String,
+        pub rubric_id: String,
+        pub reviewer_usernames: Vec<String>,
+        pub sample_interaction_ids: Vec<String>,
+        pub target_agreement_rate: Option<f64>,
+        pub min_reviewers_per_interaction: u32,
+        pub deadline_at: DateTime<Utc>,
+        pub meeting_started_at: Option<DateTime<Utc>>,
+        pub facilitator_id: Option<String>,
+        pub agreement_rate: Option<f64>,
+        pub variance_per_criterion: Option<serde_json::Value>,
+        pub created_at: DateTime<Utc>,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct CalibrationScore {
+        pub id: String,
+        pub session_id: String,
+        pub interaction_id: String,
+        pub reviewer: String,
+        pub submitted_at: DateTime<Utc>,
+        pub criterion_scores: serde_json::Value,
+        pub overall_score: f64,
+        pub notes: Option<String>,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct CalibrationDecision {
+        pub id: String,
+        pub session_id: String,
+        pub criterion_id: String,
+        pub agreed_interpretation: String,
+        pub example_interaction_id: Option<String>,
+        pub rubric_edit_proposed: Option<String>,
+        pub created_at: DateTime<Utc>,
+    }
