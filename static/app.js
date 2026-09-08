@@ -891,25 +891,19 @@ function renderRecommendations() {
         <div style="margin-bottom:8px"><b>دلایل ریسک:</b></div>
         <ul class="factors">
           ${reasons.map(f => {
-            let pillText = '';
-            let reasonText = '';
             if (typeof f === 'string') {
-              const parts = f.split(':');
-              if (parts.length > 1) {
-                pillText = parts[0].trim();
-                reasonText = parts.slice(1).join(':').trim();
-              } else {
-                // No colon - just show once
-                return `<li><span class="factor-pill">${esc(f)}</span></li>`;
+              // API returns simple strings - just show as pill
+              return `<li><span class="factor-pill">${esc(f)}</span></li>`;
+            } else if (typeof f === 'object' && f !== null) {
+              // Fallback for object format (future-proof)
+              const pillText = f.label || f.code || '';
+              const reasonText = f.reason || '';
+              if (!reasonText) {
+                return `<li><span class="factor-pill">${esc(pillText)}</span></li>`;
               }
-            } else {
-              pillText = f.label || f.code || '';
-              reasonText = f.reason || '';
+              return `<li><span class="factor-pill">${esc(pillText)}</span> <span style="color:var(--text-muted);font-size:12px">${esc(reasonText)}</span></li>`;
             }
-            if (!reasonText) {
-              return `<li><span class="factor-pill">${esc(pillText)}</span></li>`;
-            }
-            return `<li><span class="factor-pill">${esc(pillText)}</span> <span style="color:var(--text-muted);font-size:12px">${esc(reasonText)}</span></li>`;
+            return '';
           }).join('')}
         </ul>
         <div style="margin-top:8px;padding:8px;background:var(--surface-2);border-radius:6px">
