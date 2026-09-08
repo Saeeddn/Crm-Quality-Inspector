@@ -127,6 +127,8 @@ body {
   width: 16px;
   height: 16px;
 }
+.sidebar-nav::-webkit-scrollbar { display: none; }
+.sidebar-nav { -ms-overflow-style: none; scrollbar-width: none; }
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-item.active {
   background: var(--surface-2);
