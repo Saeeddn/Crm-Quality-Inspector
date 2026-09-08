@@ -15,7 +15,7 @@ const State = {
   agents: [], customers: [], interactions: [], rubrics: [],
   scores: {}, issues: [], recommendations: [], kpis: [],
   dashboard: null, agentsAvg: {},
-  loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, kpis: false, dashboard: false, rec: false },
+  loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, kpis: false, dashboard: false, rec: false, coaching: false, calibration: false },
   trendChart: null,
   scoreChart: null,
   agentChart: null,
@@ -391,13 +391,15 @@ function switchTab(tab) {
     dashboard: 'داشبورد', interactions: 'تعاملات', agents: 'کارشناسان',
     customers: 'مشتریان', risk: 'سلامت مشتریان', recommendations: 'پیشنهادهای QA', issues: 'ایرادات',
     rubrics: 'پارامترهای اندازهگیری', report: 'گزارش کارشناس',
-    users: 'مدیریت کاربران',
-  }[tab] || tab;
+        users: 'مدیریت کاربران', coaching: 'برنامههای آموزشی', calibration: 'کالیبراسیون',
+      }[tab] || tab;
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'interactions') loadInteractions();
   else if (tab === 'agents') loadAgents();
   else if (tab === 'customers') loadCustomers();
   else if (tab === 'issues') loadIssues();
+  else if (tab === 'coaching') loadCoaching();
+  else if (tab === 'calibration') loadCalibration();
   else if (tab === 'rubrics') loadKpis();
   else if (tab === 'recommendations') loadRecommendations();
   else if (tab === 'risk') loadCustomerRisk();
@@ -1394,3 +1396,479 @@ async function checkConnection() {
 }
 checkConnection();
 setInterval(checkConnection, 10000);
+
+
+// ===================== Coaching Plans (Closed-Loop QA) =====================
+const COACHING_STATUS_LABEL = {
+  'draft': 'پیشنویس', 'pending_acknowledgement': 'در انتظار تایید',
+  'acknowledged': 'تایید شده', 'in_progress': 'در حال اجرا', 'verified': 'تاییدشده با پیگیری',
+  'closed': 'بسته شده', 'escalated': 'معوق / ارجاع'
+};
+const COACHING_STATUS_PILL = {
+  'draft': 'pill-muted', 'pending_acknowledgement': 'pill-warn',
+  'acknowledged': 'pill-info', 'in_progress': 'pill-info', 'verified': 'pill-good',
+  'closed': 'pill-good', 'escalated': 'pill-bad'
+};
+
+let coachingPage = 1;
+const coachingPageSize = 10;
+
+function agentNameFor(agentId) {
+  if (!agentId) return '-';
+  const ag = (State.agents || []).find(a => String(a.id) === String(agentId));
+  return ag ? (ag.name || agentId) : agentId;
+}
+
+async function loadCoaching(force = false) {
+  const status = $('#cStatus')?.value || '';
+  if (!force && State.loaded.coaching) { renderCoaching(); return; }
+  try {
+    const params = new URLSearchParams({ offset: (coachingPage - 1) * coachingPageSize, limit: coachingPageSize });
+    if (status) params.set('status', status);
+    const data = await withLoading('در حال بارگذاری برنامههای آموزشی...', () => api('/coaching/plans?' + params));
+    State.coachingPlans = data.items || [];
+    State.coachingTotal = data.total || State.coachingPlans.length;
+    State.coachingTotalPages = Math.max(1, Math.ceil((data.total || 0) / coachingPageSize));
+    State.loaded.coaching = true;
+    setupCoachingEvents();
+    renderCoaching();
+  } catch (e) {
+    toast('خطا در بارگذاری برنامههای آموزشی: ' + e.message, 'error');
+  }
+}
+
+function setupCoachingEvents() {
+  const statusSel = $('#cStatus');
+  if (statusSel && !statusSel.dataset.bound) {
+    statusSel.addEventListener('change', () => { coachingPage = 1; loadCoaching(true); });
+    statusSel.dataset.bound = '1';
+  }
+  const newBtn = $('#newCoachingBtn');
+  if (newBtn && !newBtn.dataset.bound) {
+    newBtn.addEventListener('click', openNewCoachingPlan);
+    newBtn.dataset.bound = '1';
+  }
+}
+
+async function openNewCoachingPlan() {
+  let agents = [];
+  let interactions = [];
+  try {
+    await loadAgents();
+    agents = State.agents || [];
+  } catch (e) { /* ignore */ }
+  try {
+    const d = await api('/interactions?page=1&limit=1000');
+    interactions = (d && d.items) || [];
+  } catch (e) { /* ignore */ }
+  const agentOpts = agents.length
+    ? agents.map(a => `<option value="${esc(a.id)}">${esc(a.name)} — ${esc(a.department || '')}</option>`).join('')
+    : '<option value="">— کارشناسی نیست —</option>';
+  const intOpts = interactions.length
+    ? interactions.map(i => `<option value="${esc(i.id)}">${esc(i.id)} — ${esc(i.subject)}</option>`).join('')
+    : '<option value="">— تعاملی نیست —</option>';
+
+  openModal('برنامه آموزشی جدید', `
+    <div class="field"><label>کارشناس</label><select id="cpAgent">${agentOpts}</select></div>
+    <div class="field"><label>تعامل مرتبط</label><select id="cpInteraction">${intOpts}</select></div>
+    <div class="field"><label>موضوع آموزشی (Theme)</label><input id="cpTheme" placeholder="مثلاً احوالپرسی آغازین"></div>
+    <div class="field"><label>شکاف رفتاری</label><input id="cpGap" placeholder="مثلاً عدم احوالپرسی با مشتری"></div>
+    <div class="field"><label>شواهد</label><textarea id="cpEvidence" placeholder="مثلاً مکالمه 1460 — فقدان احوالپرسی"></textarea></div>
+    <div class="field"><label>علت ریشه</label><input id="cpRoot" placeholder="مثلاً عجله در پاسخ"></div>
+    <div class="field"><label>اثر بر مشتری</label><input id="cpImpact" placeholder="مثلاً کاهش رضایت"></div>
+    <div class="field"><label>فعالیت عملی</label><input id="cpActivity" placeholder="مثلاً نقشبازی (roleplay)"></div>
+    <div class="field"><label>سنجه موفقیت</label><input id="cpMetric" placeholder="مثلاً avg_score"></div>
+    <div class="field"><label>تعداد پیگیریها</label><input id="cpFollowups" type="number" min="1" value="2"></div>
+    <div class="field"><label>مهلت پیگیری</label><input id="cpDue" type="datetime-local"></div>
+  `, `<button class="btn btn-success" id="saveCoachingPlan">ایجاد برنامه</button>
+      <button class="btn" data-action="close-modal">انصراف</button>`);
+
+  $('#saveCoachingPlan').addEventListener('click', async () => {
+    try {
+      const agentId = $('#cpAgent').value;
+      const interactionId = $('#cpInteraction').value;
+      if (!agentId) throw new Error('کارشناس الزامی است');
+      if (!interactionId) throw new Error('تعامل الزامی است');
+      const due = $('#cpDue').value;
+      if (!due) throw new Error('مهلت الزامی است');
+      const body = {
+        agent_id: agentId,
+        interaction_id: interactionId,
+        coaching_theme: $('#cpTheme').value.trim(),
+        behavior_gap: $('#cpGap').value.trim(),
+        evidence: $('#cpEvidence').value.trim(),
+        root_cause: $('#cpRoot').value.trim(),
+        customer_impact: $('#cpImpact').value.trim(),
+        practice_activity: $('#cpActivity').value.trim(),
+        success_metric: $('#cpMetric').value.trim(),
+        follow_up_due_at: new Date(due).toISOString(),
+        follow_up_review_count: parseInt($('#cpFollowups').value, 10) || 2
+      };
+      await withLoading('در حال ایجاد برنامه...', () => api('/coaching/plans', { method: 'POST', body: JSON.stringify(body) }));
+      closeModal();
+      State.loaded.coaching = false;
+      await loadCoaching(true);
+      toast('برنامه آموزشی ایجاد شد', 'success');
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
+function renderCoaching() {
+  const tbody = document.querySelector('#coachingTable tbody');
+  if (!tbody) return;
+  const plans = State.coachingPlans || [];
+  if (plans.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">برنامه آموزشی یافت نشد</td></tr>';
+    renderPagination('#coachingPager', 0, 1, 1, () => {});
+    return;
+  }
+  tbody.innerHTML = plans.map(p => {
+    const pill = COACHING_STATUS_PILL[p.status] || 'pill-muted';
+    return `<tr>
+      <td><span class="pill ${pill}">${esc(COACHING_STATUS_LABEL[p.status] || p.status)}</span></td>
+      <td>${esc(agentNameFor(p.agent_id))}</td>
+            <td title="${esc(p.coaching_theme)}">${esc(p.coaching_theme)}</td>
+      <td title="${esc(p.behavior_gap)}">${esc(p.behavior_gap || '-')}</td>
+      <td title="${esc(p.root_cause)}">${esc(p.root_cause || '-')}</td>
+      <td title="${esc(p.customer_impact)}">${esc(p.customer_impact || '-')}</td>
+      <td>${esc(p.success_metric || '-')}</td>
+      <td>${fmtDate(p.follow_up_due_at)}</td>
+      <td class="row-actions">${renderCoachingActions(p)}</td>
+    </tr>`;
+  }).join('');
+
+  // Attach action handlers
+  tbody.querySelectorAll('[data-action-coaching]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const action = e.currentTarget.dataset.actionCoaching;
+      const planId = e.currentTarget.dataset.planId;
+      handleCoachingAction(action, planId);
+    });
+  });
+
+  renderPagination('#coachingPager', State.coachingTotal || 0, coachingPage, State.coachingTotalPages || 1, (p) => {
+    coachingPage = p;
+    loadCoaching(true);
+  });
+}
+
+function renderCoachingActions(p) {
+  const actions = [];
+  if (p.status === 'draft') {
+    actions.push(`<button class="btn btn-sm btn-primary" data-action-coaching="submit" data-plan-id="${esc(p.id)}">ارسال</button>`);
+  } else if (p.status === 'pending_acknowledgement') {
+    actions.push(`<button class="btn btn-sm btn-success" data-action-coaching="acknowledge" data-plan-id="${esc(p.id)}">تایید</button>`);
+  } else if (p.status === 'acknowledged' || p.status === 'in_progress') {
+    actions.push(`<button class="btn btn-sm btn-secondary" data-action-coaching="review" data-plan-id="${esc(p.id)}">جزئیات</button>`);
+    actions.push(`<button class="btn btn-sm btn-danger" data-action-coaching="close" data-plan-id="${esc(p.id)}">بستن</button>`);
+  } else if (p.status === 'verified') {
+    actions.push(`<button class="btn btn-sm btn-secondary" data-action-coaching="review" data-plan-id="${esc(p.id)}">جزئیات</button>`);
+    actions.push(`<button class="btn btn-sm btn-danger" data-action-coaching="close" data-plan-id="${esc(p.id)}">بستن</button>`);
+  } else if (p.status === 'escalated') {
+    actions.push(`<button class="btn btn-sm btn-secondary" data-action-coaching="review" data-plan-id="${esc(p.id)}">بررسی جزئیات</button>`);
+    actions.push(`<button class="btn btn-sm btn-warning" data-action-coaching="add-note" data-plan-id="${esc(p.id)}">افزودن یادداشت</button>`);
+    actions.push(`<button class="btn btn-sm btn-primary" data-action-coaching="resume" data-plan-id="${esc(p.id)}">ادامه</button>`);
+  }
+  if (['pending_acknowledgement','acknowledged','in_progress'].includes(p.status)) {
+    actions.push(`<button class="btn btn-sm btn-ghost" data-action-coaching="escalate" data-plan-id="${esc(p.id)}">ارجاع</button>`);
+  }
+  return actions.join(' ');
+}
+
+async function handleCoachingAction(action, planId) {
+  try {
+    if (action === 'review') {
+      await openCoachingReview(planId);
+      return;
+    }
+    if (action === 'acknowledge') {
+      await api('/coaching/plans/' + planId + '/acknowledge', { method: 'POST', body: JSON.stringify({ note: 'تایید شد' }) });
+      toast('برنامه تایید شد', 'success');
+    } else if (action === 'close') {
+      const outcome = prompt('نتیجه بسته شدن (مثلاً improved / unchanged):', 'improved');
+      if (outcome === null) return;
+      await api('/coaching/plans/' + planId + '/close', { method: 'POST', body: JSON.stringify({ outcome: outcome || 'improved' }) });
+      toast('برنامه بسته شد', 'success');
+    } else if (action === 'escalate') {
+      if (!confirm('این برنامه معوق/ارجاع شود؟')) return;
+      await api('/coaching/plans/' + planId + '/escalate', { method: 'POST' });
+      toast('برنامه ارجاع شد. منتظر بررسی مدیر باشید.', 'warning');
+    } else if (action === 'resume') {
+      if (!confirm('این برنامه به حالت در حال اجرا برگردد؟')) return;
+      await api('/coaching/plans/' + planId + '/resume', { method: 'POST' });
+      toast('برنامه به حالت در حال اجرا بازگشت.', 'success');
+    } else if (action === 'add-note') {
+      const note = prompt('یادداشت مدیر (دلیل ارجاع یا تصمیم):', '');
+      if (note === null) return;
+      if (!note.trim()) { toast('یادداشت نمی‌تواند خالی باشد', 'error'); return; }
+      await api('/coaching/plans/' + planId + '/acknowledge', { method: 'POST', body: JSON.stringify({ note: note.trim() }) });
+      toast('یادداشت ذخیره شد', 'success');
+    } else if (action === 'submit') {
+      await api('/coaching/plans/' + planId + '/submit', { method: 'POST' });
+      toast('برنامه ارسال شد (در انتظار تایید)', 'success');
+    }
+    State.loaded.coaching = false;
+    await loadCoaching(true);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function openCoachingReview(planId) {
+  showLoading('در حال بارگذاری...');
+  try {
+    const data = await api('/coaching/plans/' + planId);
+    hideLoading();
+    const plan = data.plan;
+    const fups = data.follow_ups || [];
+    const labels = COACHING_STATUS_LABEL;
+    const followUpTable = fups.length
+      ? `<table class="data-table"><thead><tr><th>تاریخ</th><th>امتیاز کلی</th><th>موفق</th></tr></thead><tbody>
+           ${fups.map(f => `<tr><td>${fmtDate(f.measured_at)}</td><td><b>${Number(f.overall_score).toFixed(1)}</b></td><td>${f.success ? '✅' : '❌'}</td></tr>`).join('')}
+         </tbody></table>`
+      : '<p style="color:var(--text-muted)">هنوز پیگیری ثبت نشده است.</p>';
+    openModal('جزئیات برنامه آموزشی', `
+      <div class="field"><b>موضوع آموزشی:</b> ${esc(plan.coaching_theme)}</div>
+      <div class="field"><b>شکاف رفتاری:</b> ${esc(plan.behavior_gap)}</div>
+      <div class="field"><b>شواهد:</b> ${esc(plan.evidence)}</div>
+      <div class="field"><b>علت ریشه:</b> ${esc(plan.root_cause)}</div>
+      <div class="field"><b>اثر بر مشتری:</b> ${esc(plan.customer_impact)}</div>
+      <div class="field"><b>فعالیت عملی:</b> ${esc(plan.practice_activity)}</div>
+      <div class="field"><b>سنجه موفقیت:</b> ${esc(plan.success_metric)}</div>
+      <div class="field"><b>وضعیت:</b> <span class="pill ${COACHING_STATUS_PILL[plan.status] || 'pill-muted'}">${esc(labels[plan.status] || plan.status)}</span></div>
+      <h4 style="margin:16px 0 8px">پیگیریها (${fups.length})</h4>
+      ${followUpTable}
+    `, `<button class="btn" data-action="close-modal">بستن</button>`);
+  } catch (e) {
+    hideLoading();
+    toast(e.message, 'error');
+  }
+}
+
+// ===================== Calibration Sessions (Blind Scoring) =====================
+const CAL_STATUS_LABEL = {
+  'draft': 'پیشنویس', 'scoring': 'در حال امتیازدهی', 'in_session': 'در جلسه',
+  'completed': 'تکمیل شده', 'cancelled': 'لغو شده'
+};
+const CAL_STATUS_PILL = {
+  'draft': 'pill-muted', 'scoring': 'pill-warn', 'in_session': 'pill-info',
+  'completed': 'pill-good', 'cancelled': 'pill-bad'
+};
+
+let calPage = 1;
+const calPageSize = 10;
+
+async function loadCalibration(force = false) {
+  const status = $('#calStatus')?.value || '';
+  if (!force && State.loaded.calibration) { renderCalibration(); return; }
+  try {
+    const params = new URLSearchParams({ offset: (calPage - 1) * calPageSize, limit: calPageSize });
+    if (status) params.set('status', status);
+    const data = await withLoading('در حال بارگذاری کالیبراسیون...', () => api('/calibration/sessions?' + params));
+    State.calibrationSessions = data.items || [];
+    State.calibrationTotal = data.total || State.calibrationSessions.length;
+    State.calibrationTotalPages = Math.max(1, Math.ceil((data.total || 0) / calPageSize));
+    State.loaded.calibration = true;
+    attachCalibrationEventListeners();
+    renderCalibration();
+  } catch (e) {
+    toast('خطا در بارگذاری کالیبراسیون: ' + e.message, 'error');
+  }
+}
+
+function attachCalibrationEventListeners() {
+  const btn = $('#newCalBtn');
+  if (btn && !btn.dataset.bound) {
+    btn.addEventListener('click', openNewCalibration);
+    btn.dataset.bound = '1';
+  }
+  const sel = $('#calStatus');
+  if (sel && !sel.dataset.bound) {
+    sel.addEventListener('change', () => { calPage = 1; loadCalibration(true); });
+    sel.dataset.bound = '1';
+  }
+}
+
+function renderCalibration() {
+  const tbody = document.querySelector('#calTable tbody');
+  if (!tbody) return;
+  const sessions = State.calibrationSessions || [];
+  if (sessions.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">جلسه کالیبراسیونی یافت نشد</td></tr>';
+    renderPagination('#calPager', 0, 1, 1, () => {});
+    return;
+  }
+  tbody.innerHTML = sessions.map(s => {
+    const pill = CAL_STATUS_PILL[s.status] || 'pill-muted';
+    const rate = s.agreement_rate != null ? (s.agreement_rate * 100).toFixed(1) + '%' : '—';
+    return `<tr>
+      <td><span class="pill ${pill}">${esc(CAL_STATUS_LABEL[s.status] || s.status)}</span></td>
+      <td>${esc(s.name)}</td>
+      <td>${esc(s.rubric_id || '-')}</td>
+      <td>${(s.sample_interaction_ids || []).length}</td>
+      <td><b>${rate}</b></td>
+      <td>${fmtDate(s.deadline_at)}</td>
+      <td class="row-actions">${renderCalibrationActions(s)}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-action-cal]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const action = e.currentTarget.dataset.actionCal;
+      const id = e.currentTarget.dataset.sessionId;
+      handleCalibrationAction(action, id);
+    });
+  });
+
+  renderPagination('#calPager', State.calibrationTotal || 0, calPage, State.calibrationTotalPages || 1, (p) => {
+    calPage = p;
+    loadCalibration(true);
+  });
+}
+
+function renderCalibrationActions(s) {
+  const a = [];
+  if (s.status === 'draft') {
+    a.push(`<button class="btn btn-sm btn-primary" data-action-cal="start" data-session-id="${esc(s.id)}">شروع</button>`);
+  } else if (s.status === 'scoring') {
+    a.push(`<button class="btn btn-sm btn-secondary" data-action-cal="score" data-session-id="${esc(s.id)}">امتیازدهی</button>`);
+    a.push(`<button class="btn btn-sm btn-success" data-action-cal="meeting" data-session-id="${esc(s.id)}">شروع جلسه</button>`);
+  } else if (s.status === 'in_session') {
+    a.push(`<button class="btn btn-sm btn-primary" data-action-cal="complete" data-session-id="${esc(s.id)}">تکمیل</button>`);
+  }
+  if (['draft','scoring'].includes(s.status)) {
+    a.push(`<button class="btn btn-sm btn-ghost" data-action-cal="cancel" data-session-id="${esc(s.id)}">لغو</button>`);
+  }
+  return a.join(' ');
+}
+
+async function handleCalibrationAction(action, id) {
+  try {
+    if (action === 'start') {
+      await api('/calibration/sessions/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to_status: 'start' }) });
+      toast('جلسه شروع شد (در حال امتیازدهی)', 'success');
+    } else if (action === 'meeting') {
+      await api('/calibration/sessions/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to_status: 'begin-meeting' }) });
+      toast('جلسه حضوری شروع شد', 'success');
+    } else if (action === 'complete') {
+      await api('/calibration/sessions/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to_status: 'complete' }) });
+      toast('جلسه تکمیل و نرخ توافق محاسبه شد', 'success');
+    } else if (action === 'cancel') {
+      if (!confirm('جلسه لغو شود؟')) return;
+      await api('/calibration/sessions/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to_status: 'cancel' }) });
+      toast('جلسه لغو شد', 'warning');
+    } else if (action === 'score') {
+      await openCalibrationScoring(id);
+      return;
+    }
+    State.loaded.calibration = false;
+    await loadCalibration(true);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function openNewCalibration() {
+  // Load rubrics + agents (for reviewers) to populate the form
+  let rubrics = [];
+  let agents = [];
+  let users = [];
+  try {
+    const r = await api('/rubrics');
+    rubrics = r || [];
+  } catch (e) { /* ignore */ }
+  try {
+    const a = await api('/agents?page=1&limit=1000');
+    agents = (a && a.items) || [];
+  } catch (e) { /* ignore */ }
+  const rubricOptions = rubrics.length
+    ? rubrics.map(x => `<option value="${esc(x.id)}">${esc(x.name || x.id)}</option>`).join('')
+    : '<option value="">— بدون روبریک —</option>';
+  const reviewerOptions = agents.length
+    ? agents.map(a => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')
+    : '';
+  const interactionOptions = (State.interactions || []).map(i => `<option value="${esc(i.id)}">${esc(i.id)} — ${esc(i.subject)}</option>`).join('');
+
+  openModal('جلسه کالیبراسیون جدید', `
+    <div class="field"><label>نام جلسه</label><input id="calName" placeholder="مثلاً کالیبراسیون مهرماه"></div>
+    <div class="field"><label>روبریک</label><select id="calRubric">${rubricOptions}</select></div>
+    <div class="field"><label>تاریخ پایان (مهلت)</label><input id="calDeadline" type="datetime-local"></div>
+    <div class="field"><label>نرخ توافق هدف (۰ تا ۱، مثلاً 0.8)</label><input id="calTarget" type="number" step="0.05" min="0" max="1" value="0.8"></div>
+    <div class="field"><label>بررسیهها (Ctrl+Click برای چند انتخاب)</label>
+      <select id="calReviewers" multiple size="4">${reviewerOptions || '<option value="">— کارشناسی نیست —</option>'}</select></div>
+    <div class="field"><label>تعاملات نمونه (Ctrl+Click)</label>
+      <select id="calSamples" multiple size="4">${interactionOptions || '<option value="">— تعاملی نیست —</option>'}</select></div>
+  `, `<button class="btn btn-success" id="saveCal">ایجاد جلسه</button>
+      <button class="btn" data-action="close-modal">انصراف</button>`);
+
+  $('#saveCal').addEventListener('click', async () => {
+    try {
+      const name = $('#calName').value.trim();
+      if (!name) throw new Error('نام جلسه الزامی است');
+      const reviewer_usernames = Array.from($('#calReviewers').selectedOptions).map(o => o.value);
+      const sample_interaction_ids = Array.from($('#calSamples').selectedOptions).map(o => o.value);
+      const dt = $('#calDeadline').value;
+      if (!dt) throw new Error('مهلت الزامی است');
+      const body = {
+        name,
+        rubric_id: $('#calRubric').value,
+        reviewer_usernames,
+        sample_interaction_ids,
+        target_agreement_rate: parseFloat($('#calTarget').value) || 0.8,
+        min_reviewers_per_interaction: 2,
+        deadline_at: new Date(dt).toISOString()
+      };
+      await withLoading('در حال ایجاد جلسه...', () => api('/calibration/sessions', { method: 'POST', body: JSON.stringify(body) }));
+      closeModal();
+      State.loaded.calibration = false;
+      await loadCalibration(true);
+      toast('جلسه کالیبراسیون ایجاد شد', 'success');
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
+async function openCalibrationScoring(sessionId) {
+  showLoading('در حال بارگذاری جلسه...');
+  try {
+    const s = await api('/calibration/sessions/' + sessionId);
+    hideLoading();
+    const samples = s.sample_interaction_ids || [];
+    if (samples.length === 0) { toast('جلسه تعامل نمونه ندارد', 'warning'); return; }
+    const sampleRows = samples.map(it => `
+      <tr>
+        <td>${esc(it)}</td>
+        <td><input type="number" class="calScore" data-interaction="${esc(it)}" min="0" max="100" value="50" style="width:90px"></td>
+        <td><input type="text" class="calNotes" data-interaction="${esc(it)}" placeholder="یادداشت (اختیاری)" style="width:100%"></td>
+      </tr>`).join('');
+    openModal('امتیازدهی کالیبراسیون', `
+      <p style="color:var(--text-muted);margin-bottom:12px">امتیاز هر تعامل را ۰ تا ۱۰۰ بگذارید. امتیازها بهصورت کور (blind) ثبت میشوند.</p>
+      <table class="data-table"><thead><tr><th>تعامل</th><th>امتیاز کلی</th><th>یادداشت</th></tr></thead><tbody>${sampleRows}</tbody></table>
+    `, `<button class="btn btn-success" id="saveCalScore">ثبت امتیازها</button>
+        <button class="btn" data-action="close-modal">انصراف</button>`);
+    $('#saveCalScore').addEventListener('click', async () => {
+      try {
+        const scores = samples.map(it => {
+          const val = parseFloat(document.querySelector(`.calScore[data-interaction="${it}"]`).value);
+          if (isNaN(val)) throw new Error('امتیاز نامعتبر برای ' + it);
+          return {
+            interaction_id: it,
+            criterion_scores: {},      // blank JSONB object; overall is the aggregate
+            overall_score: val,
+            notes: document.querySelector(`.calNotes[data-interaction="${it}"]`).value || null
+          };
+        });
+        await withLoading('در حال ثبت امتیازها...', async () => {
+          for (const sc of scores) {
+            await api('/calibration/sessions/' + sessionId + '/score', { method: 'POST', body: JSON.stringify(sc) });
+          }
+        });
+        closeModal();
+        toast('امتیازها ثبت شد', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    });
+  } catch (e) {
+    hideLoading();
+    toast(e.message, 'error');
+  }
+}
+

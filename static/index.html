@@ -51,6 +51,8 @@
       <a class="nav-item" data-tab="risk">سلامت مشتریان</a>
       <a class="nav-item" data-tab="recommendations">پیشنهادها</a>
       <a class="nav-item" data-tab="issues">ایرادات</a>
+      <a class="nav-item" data-tab="coaching">برنامه‌های آموزشی</a>
+      <a class="nav-item" data-tab="calibration">کالیبراسیون</a>
       <a class="nav-item" data-tab="rubrics">استانداردها</a>
       <a class="nav-item" data-tab="report">گزارش کارشناس</a>
       <a class="nav-item" data-tab="users">کاربران</a>
@@ -205,6 +207,53 @@
       </div>
     </div>
 
+    <div class="page hidden" id="page-coaching">
+          <div class="toolbar">
+            <h2>برنامه‌های آموزشی (Closed-Loop QA)</h2>
+            <button class="btn btn-primary" id="newCoachingBtn">+ برنامه آموزشی</button>
+          </div>
+          <div class="filter-bar">
+            <select id="cStatus">
+              <option value="">همه وضعیتها</option>
+              <option value="draft">پیش‌نویس</option><option value="pending_acknowledgement">در انتظار تایید</option>
+              <option value="acknowledged">تایید شده</option><option value="in_progress">در حال اجرا</option>
+              <option value="verified">تاییدشده با پیگیری</option><option value="closed">بسته شده</option><option value="escalated">معوق/ارجاع</option>
+            </select>
+          </div>
+          <div class="card">
+            <table class="data-table" id="coachingTable">
+              <thead><tr>
+                <th>وضعیت</th><th>کارشناس</th><th>موضوع آموزشی</th><th>شکاف رفتاری</th><th>علت ریشه</th>
+                <th>اثر بر مشتری</th><th>سنجه موفقیت</th><th>مهلت</th><th></th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+            <div id="coachingPager" style="padding:8px 0"></div>
+          </div>
+        </div>
+
+    <div class="page hidden" id="page-calibration">
+      <div class="toolbar"><h2>کالیبراسیون (Blind Scoring)</h2></div>
+      <div class="filter-bar">
+        <select id="calStatus">
+          <option value="">همه وضعیتها</option>
+          <option>draft</option><option>scoring</option><option>in_session</option>
+          <option>completed</option><option>cancelled</option>
+        </select>
+        <button class="btn btn-primary" id="newCalBtn">+ جلسه جدید</button>
+      </div>
+      <div class="card">
+        <table class="data-table" id="calTable">
+          <thead><tr>
+            <th>وضعیت</th><th>نام</th><th>روبریک</th><th>تعداد سنجش</th>
+            <th>نرخ توافق</th><th>مهلت</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <div id="calPager" style="padding:8px 0"></div>
+      </div>
+    </div>
+
     <div class="page hidden" id="page-rubrics">
       <div class="toolbar">
         <h2>پارامترهای اندازه‌گیری کیفیت (KPI)</h2>
@@ -268,6 +317,6 @@
 
 <script src="/static/jquery.js"></script>
 <script src="/static/chart.js"></script>
-<script src="/static/app.js?v=11"></script>
+<script src="/static/app.js?v=13"></script>
 </body>
 </html>
