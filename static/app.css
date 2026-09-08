@@ -494,7 +494,7 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
   .sidebar { display: none; }
   .filter-bar { grid-template-columns: 1fr; }
   .page { padding: 12px; }
-  .topbar { padding: 12px; }
+  .topbar { padding: 12px; padding-right: 80px; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -581,6 +581,7 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
 /* Mobile table cards */
 @media (max-width: 768px) {
   .mobile-menu-btn { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+  .main { margin-top: 70px; }
   
   /* Hide table headers on mobile */
   .data-table thead { display: none; }
