@@ -1463,7 +1463,7 @@ function renderAudit() {
     const totalPages = State.auditTotalPages || 1;
     pagerEl.innerHTML = total > auditPageSize ?
       `<div class="pager" style="margin-bottom:12px"><button onclick="loadAudit(${Math.max(1,auditPage-1)})" ${auditPage<=1?'disabled':''}>قبلی</button>
-       <span style="padding:0 12px">${auditPage}/${totalPages} (${total} مورد)</span>
+       <span style="padding:0 12px">${auditPage}/${totalPages} صفحه — ${total} رکورد</span>
        <button onclick="loadAudit(${auditPage+1})" ${auditPage>=totalPages?'disabled':''}>بعدی</button></div>` :
       `<div style="margin-bottom:12px;color:var(--text-muted)">${total} مورد</div>`;
   }
