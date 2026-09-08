@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تست تکرار - پیشنهادات QA</title>
+<style>
+body { font-family: system-ui; background: #0f1117; color: #e2e8f0; margin: 0; padding: 20px; }
+.card { background: #1a1d2e; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+h2 { color: #6366f1; }
+.rec-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.factor-pill { display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(99,102,241,0.15); color: #6366f1; font-size: 11px; font-weight: 600; }
+.factors { list-style: none; padding: 0; margin: 8px 0; }
+.factors li { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.factors li:last-child { border-bottom: none; }
+.test-item { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.ok { color: #22c55e; }
+.fail { color: #ef4444; }
+code { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<h2>🐛 باگ رفع‌شده: تکرار متن در پیشنهادات</h2>
+<div class="card">
+<h3>مشکل:</h3>
+<p style="color: var(--text-muted)">متن دلایل ریسک دو بار نمایش داده می‌شد: یک بار داخل تگ آبی و یک بار کنار آن.</p>
+<pre style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto;">
+قبل (اشتباه):
+<span class="factor-pill">پیش از 161 ساعت</span> پیش از 161 ساعت از ثبت گذشته
+<span class="factor-pill">مشتری VIP</span> مشتری VIP (اولویت بالا)
+<span class="factor-pill">میانگین امتیاز</span> میانگین امتیاز کارشناس پایین (46)
+</pre>
+</div>
+<div class="card">
+<h3>رفع‌شده ✅</h3>
+<p style="color: var(--text-muted)">اکنون هر دلیل فقط یک بار نمایش داده می‌شود:</p>
+<pre style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto;">
+بعد (درست):
+<span class="factor-pill">بیش از 161 ساعت از ثبت گذشته</span>
+<span class="factor-pill">مشتری VIP (اولویت بالا)</span>
+<span class="factor-pill">میانگین امتیاز کارشناس پایین (46)</span>
+</pre>
+</div>
+<div class="card">
+<h3>توضیح فنی:</h3>
+<ul style="color: var(--text-muted); font-size: 14px; line-height: 2">
+<li>API رشته‌های ساده برمی‌گرداند: <code>"بیش از 161 ساعت..."</code></li>
+<li>کد قبلی سعی می‌کرد colon جدا کند ولی colon وجود نداشت</li>
+<li>اکنون رشته مستقیم در pill نمایش داده می‌شود</li>
+<li>برای آینده، پشتیبانی از آبایک (future-proof) هم اضافه شد</li>
+</ul>
+</div>
+</body>
+</html>
