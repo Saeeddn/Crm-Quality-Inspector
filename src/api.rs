@@ -419,14 +419,16 @@ pub async fn submit_score(
 ) -> AppResult<Json<serde_json::Value>> {
     let s = Service::new(&state.store);
     let result = s.score_interaction(req).await?;
-    let _ = state.store.log_audit(&models::AuditLog {
+    let result_id = result.id.clone();
+    let details = serde_json::json!({ "interaction_id": result_id });
+    let _ = state.store.log_audit(&AuditLog {
         id: format!("audit_{}", Utc::now().timestamp_millis()),
         username: user.username.clone(),
         action: "score_interaction".to_string(),
         resource_type: "score".to_string(),
-        resource_id: result.id,
-        summary: format!("امتیازدهی تعامل"),
-        details: serde_json::json!({ "interaction_id": req.interaction_id }),
+        resource_id: Some(result_id),
+        summary: Some("امتیازدهی تعامل".into()),
+        details: Some(details),
         created_at: Utc::now(),
     }).await.unwrap_or_default();
     Ok(ok(result))
@@ -483,22 +485,25 @@ pub async fn create_issue_handler(
     Json(req): Json<CreateIssueRequest>,
 ) -> AppResult<Json<serde_json::Value>> {
     let s = Service::new(&state.store);
+    let interaction_id = req.interaction_id.clone();
+    let severity = req.severity.clone();
+    let category = req.category.clone();
     let issue = s.create_issue(
-        req.interaction_id,
+        interaction_id.clone(),
         req.agent_id,
-        req.severity,
-        req.category,
+        severity,
+        category,
         req.description,
         if req.status.is_empty() { "باز".into() } else { req.status },
     ).await?;
-    let _ = state.store.log_audit(&models::AuditLog {
+    let _ = state.store.log_audit(&AuditLog {
         id: format!("audit_{}", Utc::now().timestamp_millis()),
         username: me.username.clone(),
         action: "create_issue".to_string(),
         resource_type: "issue".to_string(),
-        resource_id: issue.id,
-        summary: format!("ایجاد ایراد برای تعامل {}", req.interaction_id),
-        details: serde_json::json!({ "severity": req.severity, "category": req.category }),
+        resource_id: Some(issue.id.clone()),
+        summary: Some(format!("ایجاد ایراد برای تعامل {}", interaction_id)),
+        details: Some(serde_json::json!({ "severity": req.severity, "category": req.category })),
         created_at: Utc::now(),
     }).await.unwrap_or_default();
     let _ = me.username;
@@ -513,14 +518,16 @@ pub async fn resolve_issue(
 ) -> AppResult<Json<serde_json::Value>> {
     let s = Service::new(&state.store);
     let issue = s.resolve_issue(&id, req).await?;
-    let _ = state.store.log_audit(&models::AuditLog {
+    let issue_id = issue.id.clone();
+    let issue_status = issue.status.clone();
+    let _ = state.store.log_audit(&AuditLog {
         id: format!("audit_{}", Utc::now().timestamp_millis()),
         username: me.username.clone(),
         action: "resolve_issue".to_string(),
         resource_type: "issue".to_string(),
-        resource_id: issue.id,
-        summary: format!("بستن ایراد {}"),
-        details: serde_json::json!({ "resolution": issue.status }),
+        resource_id: Some(issue_id),
+        summary: Some("بستن ایراد".to_string()),
+        details: Some(serde_json::json!({ "resolution": issue_status })),
         created_at: Utc::now(),
     }).await.unwrap_or_default();
     Ok(ok(issue))
@@ -768,14 +775,14 @@ pub async fn acknowledge_coaching_plan_handler(
         .store
         .transition_coaching_plan(&id, "acknowledge", None, req.note.as_deref())
         .await?;
-    let _ = state.store.log_audit(&models::AuditLog {
+    let _ = state.store.log_audit(&AuditLog {
         id: format!("audit_{}", Utc::now().timestamp_millis()),
         username: me.username.clone(),
         action: "acknowledge_coaching".to_string(),
         resource_type: "coaching_plan".to_string(),
-        resource_id: id,
-        summary: format!("تأیید برنامه آموزشی"),
-        details: serde_json::json!({ "agent_id": plan.agent_id }),
+        resource_id: Some(id.clone()),
+        summary: Some(format!("تأیید برنامه آموزشی")),
+        details: Some(serde_json::json!({ "agent_id": plan.agent_id })),
         created_at: Utc::now(),
     }).await.unwrap_or_default();
     Ok(ok(json!({ "id": id, "status": "acknowledged" })))
@@ -790,21 +797,22 @@ pub async fn close_coaching_plan_handler(
     if !me.is_admin {
         return Err(AppError::Forbidden("admin only".into()));
     }
+    let plan_id = id.clone();
     state
         .store
         .transition_coaching_plan(&id, "close", Some(&req.outcome), None)
         .await?;
-    let _ = state.store.log_audit(&models::AuditLog {
+    let _ = state.store.log_audit(&AuditLog {
         id: format!("audit_{}", Utc::now().timestamp_millis()),
         username: me.username.clone(),
         action: "close_coaching".to_string(),
         resource_type: "coaching_plan".to_string(),
-        resource_id: id,
-        summary: format!("بستن برنامه آموزشی با نتیجه {}", req.outcome),
-        details: serde_json::json!({ "outcome": req.outcome }),
+        resource_id: Some(plan_id.clone()),
+        summary: Some(format!("بستن برنامه آموزشی با نتیجه {}", req.outcome)),
+        details: Some(serde_json::json!({ "outcome": req.outcome })),
         created_at: Utc::now(),
     }).await.unwrap_or_default();
-    Ok(ok(json!({ "id": id, "status": "closed", "outcome": req.outcome })))
+    Ok(ok(json!({ "id": plan_id, "status": "closed", "outcome": req.outcome })))
 }
 
 pub async fn escalate_coaching_plan_handler(
@@ -993,14 +1001,14 @@ pub async fn submit_calibration_score_handler(
         notes,
     };
     state.store.submit_calibration_score(&score).await?;
-    let _ = state.store.log_audit(&models::AuditLog {
+    let _ = state.store.log_audit(&AuditLog {
         id: format!("audit_{}", Utc::now().timestamp_millis()),
         username: user.username.clone(),
         action: "submit_calibration_score".to_string(),
         resource_type: "calibration_score".to_string(),
-        resource_id: score.id,
-        summary: format!("امتیاز کالیبراسیون برای تعامل {}", interaction_id),
-        details: serde_json::json!({ "session_id": session_id, "overall_score": overall_score }),
+        resource_id: Some(score.id),
+        summary: Some(format!("امتیاز کالیبراسیون برای تعامل {}", interaction_id)),
+        details: Some(serde_json::json!({ "session_id": session_id, "overall_score": overall_score })),
         created_at: Utc::now(),
     }).await.unwrap_or_default();
     Ok(ok(serde_json::json!({ "submitted": true })))
@@ -1075,7 +1083,7 @@ pub async fn calibration_summary_handler(
 // =================== AUDIT LOG ===================
 
 /// ترجمه action enum به رشته قابل خواندن فارسی
-fn audit_action_label(action: &str) -> &'static str {
+fn audit_action_label(action: &str) -> &str {
     match action {
         "create_interaction" => "ایجاد تعامل",
         "score_interaction" => "امتیازدهی",

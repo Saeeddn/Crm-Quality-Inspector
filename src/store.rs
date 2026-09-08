@@ -2012,11 +2012,11 @@ impl Store {
             vec!["تقدیر"], 0).await?;
 
         Ok(())
-            }
+    }
 
-            /// Seed Persian coaching plans and calibration sessions for demo.
-            /// Called after seed_scores_and_issues so interactions and agents exist.
-            pub async fn seed_persian_coaching_calibration(&self) -> AppResult<()> {
+    /// Seed Persian coaching plans and calibration sessions for demo.
+    /// Called after seed_scores_and_issues so interactions and agents exist.
+    pub async fn seed_persian_coaching_calibration(&self) -> AppResult<()> {
                             // Skip if any coaching plans already exist (idempotent).
                             // NOTE: tables are seeded once; on a DB with stale pre-seed
                             // junk this guard skips, so demo tables were cleaned first.
@@ -2230,8 +2230,6 @@ impl Store {
 
                 Ok(())
             }
-        }
-    }
 
     // =================== AUDIT LOG ===================
 
@@ -2279,9 +2277,10 @@ impl Store {
         for p in &params { cq = cq.bind(p); }
         let total: i64 = cq.fetch_one(&self.pool).await?;
 
+        let limit_offset = idx + 1;
         let query_str = format!(
-            "SELECT * FROM audit_logs {where_sql} ORDER BY created_at DESC LIMIT ${idx} OFFSET ${idx + 1}",
-            idx = idx, idx_plus_1 = idx + 1,
+            "SELECT * FROM audit_logs {} ORDER BY created_at DESC LIMIT {} OFFSET {}",
+            where_sql, idx, limit_offset,
         );
         let mut q = sqlx::query(&query_str);
         for p in &params { q = q.bind(p); }
@@ -2299,3 +2298,4 @@ impl Store {
         }).collect();
         Ok((logs, total))
     }
+}
