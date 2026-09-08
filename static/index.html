@@ -56,6 +56,7 @@
       <a class="nav-item" data-tab="rubrics">استانداردها</a>
       <a class="nav-item" data-tab="report">گزارش کارشناس</a>
       <a class="nav-item" data-tab="users">کاربران</a>
+      <a class="nav-item" data-tab="audit" id="auditNavItem" style="display:none">📋 Audit Log</a>
     </nav>
     <div class="sidebar-footer">
       <div id="userBadge" class="user-badge"></div>
@@ -91,6 +92,7 @@
         <a class="mobile-nav-item" data-tab="rubrics">📋 استانداردها</a>
         <a class="mobile-nav-item" data-tab="report">📈 گزارش کارشناس</a>
         <a class="mobile-nav-item" data-tab="users">🔐 کاربران</a>
+        <a class="mobile-nav-item" data-tab="audit" id="mobileAuditNavItem" style="display:none">📋 Audit Log</a>
         <div style="padding:16px 20px;border-top:1px solid var(--border)">
           <button id="mobileLogoutBtn" class="btn btn-ghost btn-sm" style="width:100%">خروج</button>
         </div>
@@ -321,6 +323,23 @@
       <div class="card">
         <table class="data-table" id="usersTable">
           <thead><tr><th>نام کاربری</th><th>نقش</th><th>تاریخ ایجاد</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Audit Log Page -->
+    <div class="page hidden" id="page-audit">
+      <div class="toolbar">
+        <h2>📋 Audit Log</h2>
+        <div class="toolbar-filters" style="margin-right:auto">
+          <select id="auditAction" onchange="loadAudit(1)"><option value="">همه عملیات</option><option value="score_interaction">امتیازدهی</option><option value="create_issue">ایجاد ایراد</option><option value="resolve_issue">بستن ایراد</option><option value="acknowledge_coaching">تأیید coaching</option><option value="close_coaching">بستن coaching</option><option value="submit_calibration_score">کالیبراسیون</option></select>
+        </div>
+      </div>
+      <div id="auditPager"></div>
+      <div class="card">
+        <table class="data-table" id="auditTable">
+          <thead><tr><th>زمان</th><th>کاربر</th><th>عملیات</th><th>منبع</th><th>خلاصه</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>

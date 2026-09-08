@@ -15,7 +15,7 @@ const State = {
   agents: [], customers: [], interactions: [], rubrics: [],
   scores: {}, issues: [], recommendations: [], kpis: [],
   dashboard: null, agentsAvg: {},
-  loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, kpis: false, dashboard: false, rec: false, coaching: false, calibration: false },
+  loaded: { agents: false, customers: false, interactions: false, issues: false, rubrics: false, kpis: false, dashboard: false, rec: false, coaching: false, calibration: false, audit: false },
   trendChart: null,
   scoreChart: null,
   agentChart: null,
@@ -173,6 +173,11 @@ async function enterApp() {
   $('#appShell').classList.remove('hidden');
   $('#userBadge').textContent = State.user?.username || '';
   $('#topbarUser').textContent = State.user?.username || '';
+  // Show audit nav only for admins
+  const auditNav = $('#auditNavItem');
+  if (auditNav) auditNav.style.display = State.user?.is_admin ? '' : 'none';
+  const mobileAuditNav = $('#mobileAuditNavItem');
+  if (mobileAuditNav) mobileAuditNav.style.display = State.user?.is_admin ? '' : 'none';
   await loadDashboard();
   switchTab('dashboard');
   // Eagerly pre-fetch the customer risk page so the first tab switch
@@ -406,6 +411,7 @@ function switchTab(tab) {
   else if (tab === 'risk') loadCustomerRisk();
   else if (tab === 'report') loadAgents().then(populateReportAgents);
   else if (tab === 'users') loadUsers();
+  else if (tab === 'audit') loadAudit(1, true);
 }
 
 $$('.nav-item').forEach(n => n.addEventListener('click', () => switchTab(n.dataset.tab)));
@@ -1408,9 +1414,59 @@ function openEditUser(username) {
       if (newPass) body.password = newPass;
       await api('/users/' + encodeURIComponent(username), { method: 'PATCH', body: JSON.stringify(body) });
       closeModal(); await loadUsers();
-      toast('کاربر به‌روزرسانی شد');
+      toast('کاربر بهروزرسانی شد');
     } catch (e) { toast(e.message, 'error'); }
   });
+}
+
+// ===================== Audit Log =====================
+let auditPage = 1;
+const auditPageSize = 50;
+
+async function loadAudit(page = 1, force = false) {
+  if (!force && State.loaded.audit && page === 1) { renderAudit(); return; }
+  try {
+    const action = $('#auditAction')?.value || '';
+    const q = `?page=${page}&limit=${auditPageSize}` + (action ? `&action=${encodeURIComponent(action)}` : '');
+    const data = await api('/audit/logs' + q);
+    State.auditItems = data.items;
+    State.auditTotal = data.total;
+    State.auditTotalPages = data.total_pages;
+    State.loaded.audit = true;
+    renderAudit();
+  } catch (e) {
+    if (e.message.includes('دسترسی') || e.status === 403) {
+      $('#page-audit').innerHTML = '<div class="card" style="text-align:center;padding:40px;color:var(--text-muted)">فقط مدیر سیستم دسترسی دارد</div>';
+    } else {
+      toast(e.message, 'error');
+    }
+  }
+}
+
+function renderAudit() {
+  const tbody = $('#auditTable tbody');
+  if (!tbody) return;
+  const items = State.auditItems || [];
+  tbody.innerHTML = items.map(a => `
+    <tr>
+      <td>${new Date(a.created_at).toLocaleString('fa-IR')}</td>
+      <td>${a.username}</td>
+      <td><span class="pill pill-info">${a.action_label || a.action}</span></td>
+      <td>${a.resource_type || '-'}</td>
+      <td title="${JSON.stringify(a.details || {}).toString()}">${a.summary || '-'}</td>
+    </tr>
+  `).join('');
+  // pager
+  const pagerEl = $('#auditPager');
+  if (pagerEl) {
+    const total = State.auditTotal || 0;
+    const totalPages = State.auditTotalPages || 1;
+    pagerEl.innerHTML = total > auditPageSize ?
+      `<div class="pager" style="margin-bottom:12px"><button onclick="loadAudit(${Math.max(1,auditPage-1)})" ${auditPage<=1?'disabled':''}>قبلی</button>
+       <span style="padding:0 12px">${auditPage}/${totalPages} (${total} مورد)</span>
+       <button onclick="loadAudit(${auditPage+1})" ${auditPage>=totalPages?'disabled':''}>بعدی</button></div>` :
+      `<div style="margin-bottom:12px;color:var(--text-muted)">${total} مورد</div>`;
+  }
 }
 
 // ============ Boot ============

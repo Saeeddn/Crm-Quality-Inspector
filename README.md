@@ -374,7 +374,8 @@ Before exposing this app to the public internet:
 
 ## 🔮 Roadmap
 
-- [ ] **Customer Risk Score** — auto-rank customers by churn probability (next release)
+- [x] **Customer Risk Score** — auto-rank customers by churn probability based on scoring gaps, open issues, and interaction recency
+- [x] **Audit Log + Compliance Trail** — full audit log tracking all critical write operations (scores, issues, coaching plans, calibration sessions); admin-only tab with Persian action labels, pagination, and filter-by-action dropdown. Logged actions include: score_interaction, create_issue, resolve_issue, acknowledge_coaching, close_coaching, submit_calibration_score
 - [ ] AI-assisted scoring using LLM (suggest scores based on transcript)
 - [ ] Real-time sentiment analysis (WebSocket stream)
 - [ ] Multi-tenant support (organization isolation)

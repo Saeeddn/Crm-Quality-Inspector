@@ -203,6 +203,16 @@ impl Store {
                                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                                 UNIQUE(session_id, criterion_id)
                             )",
+                            "CREATE TABLE IF NOT EXISTS audit_logs (
+                                id TEXT PRIMARY KEY,
+                                username TEXT NOT NULL,
+                                action TEXT NOT NULL,
+                                resource_type TEXT NOT NULL DEFAULT '',
+                                resource_id TEXT,
+                                summary TEXT,
+                                details JSONB,
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                            )",
                         ];
         for sql in stmts {
             sqlx::query(sql).execute(&self.pool).await?;
@@ -210,7 +220,7 @@ impl Store {
         // Sequences for clean sequential ids. Each starts at 1000 so the
         // demo data has recognisable ids (1001, 1002, ...). The Store
         // layer reads nextval() and assigns the value as a TEXT id.
-        for tbl in ["agents", "customers", "interactions", "rubrics", "scores", "issues", "metrics", "kpis", "coaching_plans", "coaching_follow_ups", "calibration_sessions", "calibration_scores", "calibration_decisions"] {
+        for tbl in ["agents", "customers", "interactions", "rubrics", "scores", "issues", "metrics", "kpis", "coaching_plans", "coaching_follow_ups", "calibration_sessions", "calibration_scores", "calibration_decisions", "audit_logs"] {
             sqlx::query(&format!(
                 "CREATE SEQUENCE IF NOT EXISTS {tbl}_id_seq START 1000"
             ))
@@ -2221,3 +2231,71 @@ impl Store {
                 Ok(())
             }
         }
+    }
+
+    // =================== AUDIT LOG ===================
+
+    pub async fn log_audit(&self, entry: &AuditLog) -> AppResult<()> {
+        sqlx::query(
+            "INSERT INTO audit_logs (id, username, action, resource_type, resource_id, summary, details, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+        )
+        .bind(&entry.id).bind(&entry.username).bind(&entry.action)
+        .bind(&entry.resource_type).bind(&entry.resource_id)
+        .bind(&entry.summary).bind(&entry.details).bind(&entry.created_at)
+        .execute(&self.pool).await?;
+        Ok(())
+    }
+
+    pub async fn list_audit_logs(&self, limit: i64, offset: i64,
+                                 action: Option<&str>, username: Option<&str>,
+                                 resource_type: Option<&str>) -> AppResult<(Vec<AuditLog>, i64)> {
+        let mut where_clauses = Vec::new();
+        let mut params: Vec<serde_json::Value> = Vec::new();
+        let mut idx = 1i32;
+        if let Some(a) = action {
+            where_clauses.push(format!("action = ${idx}"));
+            params.push(serde_json::json!(a));
+            idx += 1;
+        }
+        if let Some(u) = username {
+            where_clauses.push(format!("username = ${idx}"));
+            params.push(serde_json::json!(u));
+            idx += 1;
+        }
+        if let Some(rt) = resource_type {
+            where_clauses.push(format!("resource_type = ${idx}"));
+            params.push(serde_json::json!(rt));
+            idx += 1;
+        }
+        let where_sql = if where_clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", where_clauses.join(" AND "))
+        };
+
+        let count_sql = format!("SELECT COUNT(*) FROM audit_logs {where_sql}");
+        let mut cq = sqlx::query_scalar::<_, i64>(&count_sql);
+        for p in &params { cq = cq.bind(p); }
+        let total: i64 = cq.fetch_one(&self.pool).await?;
+
+        let query_str = format!(
+            "SELECT * FROM audit_logs {where_sql} ORDER BY created_at DESC LIMIT ${idx} OFFSET ${idx + 1}",
+            idx = idx, idx_plus_1 = idx + 1,
+        );
+        let mut q = sqlx::query(&query_str);
+        for p in &params { q = q.bind(p); }
+        q = q.bind(limit).bind(offset);
+        let rows = q.fetch_all(&self.pool).await?;
+        let logs = rows.into_iter().map(|r| AuditLog {
+            id: r.get("id"),
+            username: r.get("username"),
+            action: r.get("action"),
+            resource_type: r.get("resource_type"),
+            resource_id: r.get("resource_id"),
+            summary: r.get("summary"),
+            details: r.get("details"),
+            created_at: r.get("created_at"),
+        }).collect();
+        Ok((logs, total))
+    }

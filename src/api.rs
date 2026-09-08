@@ -68,6 +68,8 @@ pub fn router() -> Router<AppState> {
                 .route("/calibration/sessions/:id/decisions", post(save_calibration_decisions_handler))
                 .route("/calibration/rubrics/:rubric_id/history", get(calibration_rubric_history_handler))
                 .route("/calibration/summary", get(calibration_summary_handler))
+                // =================== Audit Log ===================
+                .route("/audit/logs", get(list_audit_logs_handler))
         }
 
 pub async fn serve_index() -> impl IntoResponse {
@@ -412,10 +414,22 @@ pub async fn create_rubric(
 
 pub async fn submit_score(
     State(state): State<AppState>,
+    Extension(user): Extension<Arc<CurrentUser>>,
     Json(req): Json<ScoreRequest>,
 ) -> AppResult<Json<serde_json::Value>> {
     let s = Service::new(&state.store);
-    Ok(ok(s.score_interaction(req).await?))
+    let result = s.score_interaction(req).await?;
+    let _ = state.store.log_audit(&models::AuditLog {
+        id: format!("audit_{}", Utc::now().timestamp_millis()),
+        username: user.username.clone(),
+        action: "score_interaction".to_string(),
+        resource_type: "score".to_string(),
+        resource_id: result.id,
+        summary: format!("امتیازدهی تعامل"),
+        details: serde_json::json!({ "interaction_id": req.interaction_id }),
+        created_at: Utc::now(),
+    }).await.unwrap_or_default();
+    Ok(ok(result))
 }
 
 pub async fn get_score_by_interaction(
@@ -477,17 +491,39 @@ pub async fn create_issue_handler(
         req.description,
         if req.status.is_empty() { "باز".into() } else { req.status },
     ).await?;
+    let _ = state.store.log_audit(&models::AuditLog {
+        id: format!("audit_{}", Utc::now().timestamp_millis()),
+        username: me.username.clone(),
+        action: "create_issue".to_string(),
+        resource_type: "issue".to_string(),
+        resource_id: issue.id,
+        summary: format!("ایجاد ایراد برای تعامل {}", req.interaction_id),
+        details: serde_json::json!({ "severity": req.severity, "category": req.category }),
+        created_at: Utc::now(),
+    }).await.unwrap_or_default();
     let _ = me.username;
     Ok(ok(issue))
 }
 
 pub async fn resolve_issue(
     State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>,
     Path(id): Path<String>,
     Json(req): Json<ResolveIssueRequest>,
 ) -> AppResult<Json<serde_json::Value>> {
     let s = Service::new(&state.store);
-    Ok(ok(s.resolve_issue(&id, req).await?))
+    let issue = s.resolve_issue(&id, req).await?;
+    let _ = state.store.log_audit(&models::AuditLog {
+        id: format!("audit_{}", Utc::now().timestamp_millis()),
+        username: me.username.clone(),
+        action: "resolve_issue".to_string(),
+        resource_type: "issue".to_string(),
+        resource_id: issue.id,
+        summary: format!("بستن ایراد {}"),
+        details: serde_json::json!({ "resolution": issue.status }),
+        created_at: Utc::now(),
+    }).await.unwrap_or_default();
+    Ok(ok(issue))
 }
 
 // ============ Recommendations ============
@@ -732,6 +768,16 @@ pub async fn acknowledge_coaching_plan_handler(
         .store
         .transition_coaching_plan(&id, "acknowledge", None, req.note.as_deref())
         .await?;
+    let _ = state.store.log_audit(&models::AuditLog {
+        id: format!("audit_{}", Utc::now().timestamp_millis()),
+        username: me.username.clone(),
+        action: "acknowledge_coaching".to_string(),
+        resource_type: "coaching_plan".to_string(),
+        resource_id: id,
+        summary: format!("تأیید برنامه آموزشی"),
+        details: serde_json::json!({ "agent_id": plan.agent_id }),
+        created_at: Utc::now(),
+    }).await.unwrap_or_default();
     Ok(ok(json!({ "id": id, "status": "acknowledged" })))
 }
 
@@ -748,6 +794,16 @@ pub async fn close_coaching_plan_handler(
         .store
         .transition_coaching_plan(&id, "close", Some(&req.outcome), None)
         .await?;
+    let _ = state.store.log_audit(&models::AuditLog {
+        id: format!("audit_{}", Utc::now().timestamp_millis()),
+        username: me.username.clone(),
+        action: "close_coaching".to_string(),
+        resource_type: "coaching_plan".to_string(),
+        resource_id: id,
+        summary: format!("بستن برنامه آموزشی با نتیجه {}", req.outcome),
+        details: serde_json::json!({ "outcome": req.outcome }),
+        created_at: Utc::now(),
+    }).await.unwrap_or_default();
     Ok(ok(json!({ "id": id, "status": "closed", "outcome": req.outcome })))
 }
 
@@ -937,6 +993,16 @@ pub async fn submit_calibration_score_handler(
         notes,
     };
     state.store.submit_calibration_score(&score).await?;
+    let _ = state.store.log_audit(&models::AuditLog {
+        id: format!("audit_{}", Utc::now().timestamp_millis()),
+        username: user.username.clone(),
+        action: "submit_calibration_score".to_string(),
+        resource_type: "calibration_score".to_string(),
+        resource_id: score.id,
+        summary: format!("امتیاز کالیبراسیون برای تعامل {}", interaction_id),
+        details: serde_json::json!({ "session_id": session_id, "overall_score": overall_score }),
+        created_at: Utc::now(),
+    }).await.unwrap_or_default();
     Ok(ok(serde_json::json!({ "submitted": true })))
 }
 
@@ -1004,4 +1070,84 @@ pub async fn calibration_summary_handler(
     }
     trend.sort_by(|a, b| b["date"].as_str().cmp(&a["date"].as_str()));
     Ok(ok(serde_json::json!({ "trend": trend })))
+}
+
+// =================== AUDIT LOG ===================
+
+/// ترجمه action enum به رشته قابل خواندن فارسی
+fn audit_action_label(action: &str) -> &'static str {
+    match action {
+        "create_interaction" => "ایجاد تعامل",
+        "score_interaction" => "امتیازدهی",
+        "create_issue" => "ایجاد ایراد",
+        "resolve_issue" => "بستن ایراد",
+        "create_agent" => "ایجاد کارشناس",
+        "update_agent" => "ویرایش کارشناس",
+        "delete_agent" => "حذف کارشناس",
+        "create_customer" => "ایجاد مشتری",
+        "update_customer" => "ویرایش مشتری",
+        "delete_customer" => "حذف مشتری",
+        "create_rubric" => "ایجاد روبریک",
+        "update_rubric" => "ویرایش روبریک",
+        "create_coaching_plan" => "ایجاد برنامه آموزشی",
+        "update_coaching_plan" => "ویرایش برنامه آموزشی",
+        "acknowledge_coaching" => "تأیید برنامه آموزشی",
+        "close_coaching" => "بستن برنامه آموزشی",
+        "create_calibration_session" => "ایجاد جلسه کالیبراسیون",
+        "update_calibration_session" => "ویرایش جلسه کالیبراسیون",
+        "submit_calibration_score" => "ثبت امتیاز کالیبراسیون",
+        "create_user" => "ایجاد کاربر",
+        "update_user" => "ویرایش کاربر",
+        "delete_user" => "حذف کاربر",
+        "login" => "ورود",
+        _ => action,
+    }
+}
+
+#[derive(Deserialize)]
+pub struct AuditLogQuery {
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+    pub action: Option<String>,
+    pub username: Option<String>,
+    pub resource_type: Option<String>,
+}
+
+pub async fn list_audit_logs_handler(
+    State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>,
+    Query(q): Query<AuditLogQuery>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !me.is_admin {
+        return Err(AppError::Forbidden("فقط مدیر سیستم دسترسی دارد".into()));
+    }
+    let page = q.page.unwrap_or(1).max(1);
+    let limit = q.limit.unwrap_or(50).min(200).max(1);
+    let offset = (page - 1) * limit;
+    let (items, total) = state.store.list_audit_logs(
+        limit, offset,
+        q.action.as_deref(),
+        q.username.as_deref(),
+        q.resource_type.as_deref(),
+    ).await?;
+    let items: Vec<serde_json::Value> = items.into_iter().map(|a| {
+        serde_json::json!({
+            "id": a.id,
+            "username": a.username,
+            "action": a.action,
+            "action_label": audit_action_label(&a.action),
+            "resource_type": a.resource_type,
+            "resource_id": a.resource_id,
+            "summary": a.summary,
+            "details": a.details,
+            "created_at": a.created_at.to_rfc3339(),
+        })
+    }).collect();
+    Ok(ok(json!({
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": if limit > 0 { (total + limit - 1) / limit } else { 1 },
+    })))
 }

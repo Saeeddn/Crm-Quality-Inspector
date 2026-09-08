@@ -724,3 +724,46 @@ pub struct ListQuery {
         pub rubric_edit_proposed: Option<String>,
         pub created_at: DateTime<Utc>,
     }
+
+    // ===================== AUDIT LOG =====================
+
+    /// عمل انجام‌شده (action type)
+    #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+    #[serde(rename_all = "snake_case")]
+    pub enum AuditAction {
+        CreateInteraction,
+        ScoreInteraction,
+        CreateIssue,
+        ResolveIssue,
+        CreateAgent,
+        UpdateAgent,
+        DeleteAgent,
+        CreateCustomer,
+        UpdateCustomer,
+        DeleteCustomer,
+        CreateRubric,
+        UpdateRubric,
+        CreateCoachingPlan,
+        UpdateCoachingPlan,
+        AcknowledgeCoaching,
+        CloseCoaching,
+        CreateCalibrationSession,
+        UpdateCalibrationSession,
+        SubmitCalibrationScore,
+        CreateUser,
+        UpdateUser,
+        DeleteUser,
+        Login,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct AuditLog {
+        pub id: String,
+        pub username: String,
+        pub action: String,
+        pub resource_type: String,
+        pub resource_id: Option<String>,
+        pub summary: Option<String>,
+        pub details: Option<serde_json::Value>,
+        pub created_at: DateTime<Utc>,
+    }
