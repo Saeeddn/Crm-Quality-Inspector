@@ -595,12 +595,13 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
 
 /* Mobile table cards */
 @media (max-width: 768px) {
-  .mobile-menu-btn { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+  /* Button already visible from 900px media query, just adjust sizing */
+  .mobile-menu-btn { gap: 6px; font-size: 14px; }
   /* No more margin-top needed - button is inside topbar */
-  
+
   /* Hide table headers on mobile */
   .data-table thead { display: none; }
-  
+
   /* Convert rows to cards */
   .data-table, .data-table tbody, .data-table tr, .data-table td {
     display: block;
