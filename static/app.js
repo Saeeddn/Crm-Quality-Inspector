@@ -891,10 +891,25 @@ function renderRecommendations() {
         <div style="margin-bottom:8px"><b>دلایل ریسک:</b></div>
         <ul class="factors">
           ${reasons.map(f => {
+            let pillText = '';
+            let reasonText = '';
             if (typeof f === 'string') {
-              return `<li><span class="factor-pill">${esc(f.split(':')[0] || 'عامل')}</span> <span style="color:var(--text-muted);font-size:12px">${esc(f.includes(':') ? f.split(':').slice(1).join(':') : f)}</span></li>`;
+              const parts = f.split(':');
+              if (parts.length > 1) {
+                pillText = parts[0].trim();
+                reasonText = parts.slice(1).join(':').trim();
+              } else {
+                // No colon - just show once
+                return `<li><span class="factor-pill">${esc(f)}</span></li>`;
+              }
+            } else {
+              pillText = f.label || f.code || '';
+              reasonText = f.reason || '';
             }
-            return `<li><span class="factor-pill">${esc(f.label || f.code || '')}</span> <span style="color:var(--text-muted);font-size:12px">${esc(f.reason || '')}</span></li>`;
+            if (!reasonText) {
+              return `<li><span class="factor-pill">${esc(pillText)}</span></li>`;
+            }
+            return `<li><span class="factor-pill">${esc(pillText)}</span> <span style="color:var(--text-muted);font-size:12px">${esc(reasonText)}</span></li>`;
           }).join('')}
         </ul>
         <div style="margin-top:8px;padding:8px;background:var(--surface-2);border-radius:6px">
