@@ -497,17 +497,17 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
   .topbar { 
     padding: 12px; 
     gap: 8px;
-    justify-content: flex-start; /* Right-to-left: button first, then title */
+    direction: ltr; /* Reset direction for proper flexbox behavior */
   }
   .mobile-menu-btn { 
     display: flex; 
     align-items: center; 
     gap: 4px;
-    margin-right: auto; /* Push to left in RTL context */
-    order: 0; /* Keep natural order */
+    order: 2; /* Second position (after title) */
     flex-shrink: 0; /* Don't shrink */
   }
-  .topbar-title { font-size: 14px; flex: 1; text-align: center; min-width: 0; }
+  .topbar-title { font-size: 14px; flex: 1; text-align: center; min-width: 0; order: 1; }
+  .topbar-actions { order: 3; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
