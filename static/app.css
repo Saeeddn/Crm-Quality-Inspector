@@ -502,7 +502,7 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
     display: flex; 
     align-items: center; 
     gap: 4px;
-    order: 3; /* Rightmost in RTL flex */
+    order: 3; /* Left side in RTL */
     flex-shrink: 0;
   }
   .topbar-title { font-size: 14px; flex: 1; text-align: center; min-width: 0; order: 2; }
