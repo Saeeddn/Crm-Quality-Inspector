@@ -2277,10 +2277,9 @@ impl Store {
         for p in &params { cq = cq.bind(p); }
         let total: i64 = cq.fetch_one(&self.pool).await?;
 
-        let limit_offset = idx + 1;
         let query_str = format!(
-            "SELECT * FROM audit_logs {} ORDER BY created_at DESC LIMIT {} OFFSET {}",
-            where_sql, idx, limit_offset,
+            "SELECT * FROM audit_logs {} ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+            where_sql,
         );
         let mut q = sqlx::query(&query_str);
         for p in &params { q = q.bind(p); }
