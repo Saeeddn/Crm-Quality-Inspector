@@ -499,19 +499,11 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
     padding: 12px; 
     gap: 8px;
   }
-  .mobile-menu-btn { 
-    display: flex; 
-    align-items: center; 
-    gap: 4px;
-    order: 3; /* Left side in RTL */
-    flex-shrink: 0;
-  }
-  .topbar-title { font-size: 14px; flex: 1; text-align: center; min-width: 0; order: 2; }
-  .topbar-actions { display: flex; align-items: center; gap: 8px; order: 1; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ================== Mobile Responsive ================== */
+/* Base style - hidden by default */
 .mobile-menu-btn {
   display: none;
   position: static; /* Not fixed - use normal flow */
@@ -525,6 +517,19 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
   box-shadow: var(--shadow-sm);
 }
 .mobile-menu-btn:hover { background: var(--surface-2); }
+
+/* Mobile visible - this comes AFTER base, so it overrides */
+@media (max-width: 900px) {
+  .mobile-menu-btn { 
+    display: flex; 
+    align-items: center; 
+    gap: 4px;
+    order: 3; /* Left side in RTL */
+    flex-shrink: 0;
+  }
+  .topbar-title { font-size: 14px; flex: 1; text-align: center; min-width: 0; order: 2; }
+  .topbar-actions { display: flex; align-items: center; gap: 8px; order: 1; }
+}
 
 .mobile-nav-overlay {
   display: none;
