@@ -497,16 +497,16 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
   .topbar { 
     padding: 12px; 
     gap: 8px;
-    direction: ltr; /* Temporarily switch to LTR for proper ordering */
   }
-  .topbar-title { font-size: 14px; flex: 1; text-align: center; min-width: 0; }
-  .topbar-actions { display: flex; align-items: center; gap: 8px; }
   .mobile-menu-btn { 
     display: flex; 
     align-items: center; 
     gap: 4px;
-    margin-right: auto; /* Push to left in LTR context */
+    order: 3; /* Rightmost in RTL flex */
+    flex-shrink: 0;
   }
+  .topbar-title { font-size: 14px; flex: 1; text-align: center; min-width: 0; order: 2; }
+  .topbar-actions { display: flex; align-items: center; gap: 8px; order: 1; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
