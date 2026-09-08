@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تست عنوان هدر</title>
+<style>
+body { font-family: system-ui; background: #1a1d2e; color: #e2e8f0; padding: 40px; }
+.test-box { margin: 20px 0; padding: 20px; background: #0f1117; border-radius: 8px; }
+.code { direction: ltr; text-align: left; font-family: monospace; color: #94a3b8; }
+</style>
+</head>
+<body>
+<h2>تست‌های مختلف برای عنوان هدر:</h2>
+
+<div class="test-box">
+<h3>۱. بدون fix (مشکل فعلی):</h3>
+<div id="test1" style="font-size: 20px; font-weight: bold;"></div>
+<pre class="code">document.getElementById('test1').textContent = 'پیشنهاد QA';</pre>
+</div>
+
+<div class="test-box">
+<h3>۲. با span لار (fix فعلی):</h3>
+<div id="test2" style="font-size: 20px; font-weight: bold;"></div>
+<pre class="code">element.innerHTML = 'پیشنهاد<span dir="ltr" class="qa-label">QA</span>';</pre>
+</div>
+
+<div class="test-box">
+<h3>۳. با LRM (پیشنهاد من):</h3>
+<div id="test3" style="font-size: 20px; font-weight: bold;"></div>
+<pre class="code">element.innerHTML = 'پیشنهاد\u200eQA'; // \u200e = LTR mark</pre>
+</div>
+
+<div class="test-box">
+<h3>۴. بدون ترکیب زبان:</h3>
+<div id="test4" style="font-size: 20px; font-weight: bold;"></div>
+<pre class="code">element.textContent = 'پیشنهاد (QA)';</pre>
+</div>
+
+<script>
+document.getElementById('test1').textContent = 'پیشنهاد QA';
+document.getElementById('test2').innerHTML = 'پیشنهاد<span dir="ltr" class="qa-label">QA</span>';
+document.getElementById('test3').innerHTML = 'پیشنهاد\u200eQA'; // LTR mark
+document.getElementById('test4').textContent = 'پیشنهاد (QA)';
+</script>
+</body>
+</html>
