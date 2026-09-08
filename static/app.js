@@ -172,6 +172,7 @@ async function enterApp() {
   $('#loginScreen').classList.add('hidden');
   $('#appShell').classList.remove('hidden');
   $('#userBadge').textContent = State.user?.username || '';
+  $('#topbarUser').textContent = State.user?.username || '';
   await loadDashboard();
   switchTab('dashboard');
   // Eagerly pre-fetch the customer risk page so the first tab switch

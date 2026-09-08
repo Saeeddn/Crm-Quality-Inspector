@@ -139,8 +139,9 @@ body {
   background: linear-gradient(135deg, var(--primary), #8b5cf6);
   display: inline-block;
 }
+#topbarUser { display: none; }
 
-.main { display: flex; flex-direction: column; min-width: 0; margin-top: 60px; }
+.main { display: flex; flex-direction: column; min-width: 0; margin-top: 0; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 32px;
@@ -518,15 +519,16 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
     padding: 12px; 
     gap: 8px;
   }
-  .mobile-menu-btn { 
-    display: flex; 
-    align-items: center; 
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
     gap: 4px;
-    order: 3; /* Left side in RTL */
+    order: 1; /* Right side in RTL */
     flex-shrink: 0;
   }
   .topbar-title { font-size: 14px; flex: 1; text-align: center; min-width: 0; order: 2; }
-  .topbar-actions { display: flex; align-items: center; gap: 8px; order: 1; }
+  .topbar-actions { display: flex; align-items: center; gap: 8px; order: 3; }
+  #topbarUser { display: flex; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
