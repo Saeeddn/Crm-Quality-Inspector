@@ -55,6 +55,7 @@ pub fn router() -> Router<AppState> {
         .route("/coaching/plans/:id/acknowledge", post(acknowledge_coaching_plan_handler))
         .route("/coaching/plans/:id/close", post(close_coaching_plan_handler))
         .route("/coaching/plans/:id/escalate", post(escalate_coaching_plan_handler))
+        .route("/coaching/plans/:id/resume", post(resume_coaching_plan_handler))
         .route("/coaching/summary", get(coaching_summary_handler))
         .route("/coaching/plans/:id/follow-ups", post(record_coaching_follow_up_handler))
                 // =================== Calibration Sessions ===================
@@ -762,6 +763,18 @@ pub async fn escalate_coaching_plan_handler(
     Ok(ok(json!({ "id": id, "status": "escalated" })))
 }
 
+pub async fn resume_coaching_plan_handler(
+    Extension(me): Extension<Arc<CurrentUser>>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    if !me.is_admin {
+        return Err(AppError::Forbidden("admin only".into()));
+    }
+    state.store.transition_coaching_plan(&id, "resume", None, None).await?;
+    Ok(ok(json!({ "id": id, "status": "in_progress" })))
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FollowUpCreate {
     pub interaction_id: String,
@@ -819,7 +832,7 @@ pub async fn list_calibration_sessions_handler(
     let (items, total) = state.store
         .list_calibration_sessions(q.status.as_deref(), q.rubric_id.as_deref(), limit, offset)
         .await?;
-    Ok(Json(serde_json::json!({ "items": items, "total": total, "offset": offset, "limit": limit })))
+    Ok(ok(json!({ "items": items, "total": total, "offset": offset, "limit": limit })))
 }
 
 pub async fn create_calibration_session_handler(
@@ -971,7 +984,7 @@ pub async fn calibration_rubric_history_handler(
     let limit = q.limit.unwrap_or(25).max(1).min(200);
     let offset = q.offset.unwrap_or(0).max(0);
     let (decisions, total) = state.store.get_rubric_decision_history(&rubric_id, limit, offset).await?;
-    Ok(Json(serde_json::json!({ "decisions": decisions, "total": total })))
+    Ok(ok(json!({ "decisions": decisions, "total": total })))
 }
 
 pub async fn calibration_summary_handler(

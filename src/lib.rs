@@ -94,7 +94,8 @@ impl AppState {
         }
         self.store.seed_demo_data().await?;
         self.store.seed_scores_and_issues().await?;
-        Ok(())
+                self.store.seed_persian_coaching_calibration().await?;
+                Ok(())
     }
 }
 

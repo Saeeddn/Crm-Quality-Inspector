@@ -208,25 +208,29 @@
     </div>
 
     <div class="page hidden" id="page-coaching">
-      <div class="toolbar"><h2>برنامه‌های آموزشی (Closed-Loop QA)</h2></div>
-      <div class="filter-bar">
-        <select id="cStatus">
-          <option value="">همه وضعیتها</option>
-          <option>باز</option><option>در انتظار</option><option>شروع شده</option>
-          <option>در حال پیگیری</option><option>بسته شده</option><option>لغو شده</option>
-        </select>
-      </div>
-      <div class="card">
-        <table class="data-table" id="coachingTable">
-          <thead><tr>
-            <th>وضعیت</th><th>مشتری</th><th>ریشه مشکل</th><th>هدف آموزشی</th><th>پسوند موفقیت</th>
-            <th>پیگیری‌ها</th><th>مسئول</th><th>تاریخ اتمام</th><th></th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
-        <div id="coachingPager" style="padding:8px 0"></div>
-      </div>
-    </div>
+          <div class="toolbar">
+            <h2>برنامه‌های آموزشی (Closed-Loop QA)</h2>
+            <button class="btn btn-primary" id="newCoachingBtn">+ برنامه آموزشی</button>
+          </div>
+          <div class="filter-bar">
+            <select id="cStatus">
+              <option value="">همه وضعیتها</option>
+              <option value="draft">پیش‌نویس</option><option value="pending_acknowledgement">در انتظار تایید</option>
+              <option value="acknowledged">تایید شده</option><option value="in_progress">در حال اجرا</option>
+              <option value="verified">تاییدشده با پیگیری</option><option value="closed">بسته شده</option><option value="escalated">معوق/ارجاع</option>
+            </select>
+          </div>
+          <div class="card">
+            <table class="data-table" id="coachingTable">
+              <thead><tr>
+                <th>وضعیت</th><th>کارشناس</th><th>موضوع آموزشی</th><th>شکاف رفتاری</th><th>علت ریشه</th>
+                <th>اثر بر مشتری</th><th>سنجه موفقیت</th><th>مهلت</th><th></th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+            <div id="coachingPager" style="padding:8px 0"></div>
+          </div>
+        </div>
 
     <div class="page hidden" id="page-calibration">
       <div class="toolbar"><h2>کالیبراسیون (Blind Scoring)</h2></div>
@@ -313,6 +317,6 @@
 
 <script src="/static/jquery.js"></script>
 <script src="/static/chart.js"></script>
-<script src="/static/app.js?v=11"></script>
+<script src="/static/app.js?v=13"></script>
 </body>
 </html>

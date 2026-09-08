@@ -1116,7 +1116,12 @@ impl Store {
                         closed_at, closed_outcome, escalated_at
                  FROM coaching_plans {} ORDER BY created_at DESC LIMIT ${idx} OFFSET ${}", where_clause, idx + 1);
 
-            let total: i64 = sqlx::query_scalar(&count_sql).fetch_one(&self.pool).await?;
+            let total: i64 = {
+                let mut cq = sqlx::query_scalar(&count_sql);
+                if let Some(a) = agent_id { cq = cq.bind(a); }
+                if let Some(s) = status { cq = cq.bind(s); }
+                cq.fetch_one(&self.pool).await?
+            };
 
             let mut q = sqlx::query(&list_sql);
             if let Some(a) = agent_id { q = q.bind(a); }
@@ -1166,8 +1171,10 @@ impl Store {
                 ("draft", "submit") => "pending_acknowledgement",
                 ("pending_acknowledgement", "acknowledge") => "acknowledged",
                 ("acknowledged" | "in_progress", "verify") => "verified",
-                ("acknowledged" | "in_progress" | "verified", "close") => "closed",
+                ("acknowledged" | "in_progress" | "verified" | "escalated", "close") => "closed",
                 (_, "escalate") => "escalated",
+                ("escalated", "resume") => "in_progress",
+                ("escalated", "note") => "escalated",
                 (s, a) => {
                     return Err(AppError::BadRequest(format!(
                         "invalid coaching plan transition '{a}' from '{s}'"
@@ -1185,14 +1192,30 @@ impl Store {
                     "UPDATE coaching_plans SET status=$1, closed_at=NOW(), closed_outcome=$3 WHERE id=$2".to_string(),
                 "escalated" =>
                     "UPDATE coaching_plans SET status=$1, escalated_at=NOW() WHERE id=$2".to_string(),
+                "in_progress" =>
+                    // resume from escalation: keep the note, clear escalation flag
+                    "UPDATE coaching_plans SET status=$1, escalated_at=NULL WHERE id=$2".to_string(),
                 _ => unreachable!(),
             };
-            let mut exec = sqlx::query(&q).bind(new_status).bind(id);
-            if matches!(new_status, "acknowledged") {
-                exec = exec.bind(note);
+            if action == "note" {
+                // Manager note on an escalated plan: store it, keep status escalated.
+                let note_q = "UPDATE coaching_plans SET acknowledged_note=$1, escalated_at=NOW() WHERE id=$2";
+                sqlx::query(note_q)
+                    .bind(note.unwrap_or(""))
+                    .bind(id)
+                    .execute(&self.pool)
+                    .await?;
+                return Ok(());
             }
-            if new_status == "closed" {
-                exec = exec.bind(outcome.unwrap_or("improved"));
+            let mut exec = sqlx::query(&q).bind(new_status).bind(id);
+            match new_status {
+                "acknowledged" => {
+                    exec = exec.bind(note);
+                }
+                "closed" => {
+                    exec = exec.bind(outcome.unwrap_or("improved"));
+                }
+                _ => {}
             }
             exec.execute(&self.pool).await?;
             Ok(())
@@ -1660,12 +1683,11 @@ impl Store {
             for sid in &session_ids { q = q.bind(sid); }
             q = q.bind(limit).bind(offset);
             let rows = q.fetch_all(&self.pool).await?;
-            let mut count_q = sqlx::query_scalar(
-                            &format!(
-                                "SELECT COUNT(*) FROM calibration_decisions WHERE session_id IN ({})",
-                                placeholders_str
-                            )
-                        );
+            let count_query = format!(
+                                            "SELECT COUNT(*) FROM calibration_decisions WHERE session_id IN ({})",
+                                            placeholders_str
+                                        );
+                        let mut count_q = sqlx::query_scalar(&count_query);
                         for sid in &session_ids { count_q = count_q.bind(sid); }
                         let total: i64 = count_q.fetch_one(&self.pool).await?;
             let decisions = rows.into_iter().map(|r| CalibrationDecision {
@@ -1980,5 +2002,222 @@ impl Store {
             vec!["تقدیر"], 0).await?;
 
         Ok(())
-    }
-}
+            }
+
+            /// Seed Persian coaching plans and calibration sessions for demo.
+            /// Called after seed_scores_and_issues so interactions and agents exist.
+            pub async fn seed_persian_coaching_calibration(&self) -> AppResult<()> {
+                            // Skip if any coaching plans already exist (idempotent).
+                            // NOTE: tables are seeded once; on a DB with stale pre-seed
+                            // junk this guard skips, so demo tables were cleaned first.
+                            let existing = self.list_coaching_plans(None, None, 1, 0).await?;
+                            if !existing.0.is_empty() {
+                                return Ok(());
+                            }
+
+                let agents = self.list_agents().await?;
+                let interactions = self.list_interactions().await?;
+                if agents.is_empty() || interactions.is_empty() {
+                    return Ok(());
+                }
+
+                // Use the first few agents and interactions
+                let agent_ids: Vec<String> = agents.iter().take(3).map(|a| a.id.clone()).collect();
+                let int_ids: Vec<String> = interactions.iter().take(6).map(|i| i.id.clone()).collect();
+                let now = Utc::now();
+
+                // ---------- Coaching Plans (Persian) ----------
+                // Plan 1: draft → will be submitted
+                let cp1 = CoachingPlan {
+                    id: self.next_id("coaching_plans_id_seq").await?,
+                    agent_id: agent_ids[0].clone(),
+                    interaction_id: int_ids[0].clone(),
+                    created_by: "demo_admin".into(),
+                    created_at: now - chrono::Duration::days(2),
+                    coaching_theme: "احوالپرسی و بازخورد مثبت".into(),
+                    behavior_gap: "کارشناس در شروع مکالمه احوالپرسی نمی‌کند و مستقیماً موضوع را آغاز می‌کند".into(),
+                    evidence: format!("مکالمه {} — первые ۳۰ ثانیه فاقد احوالپرسی", int_ids[0]),
+                    root_cause: "عدم تمرین اسکریپت ورود به مکالمه".into(),
+                    customer_impact: "مشتری حس می‌کند اهمیتی ندارد و اعتماد اولیه پایین می‌آید".into(),
+                    practice_activity: "نقش‌بازی (roleplay) ۱۰ دقیقه‌ای با مربی".into(),
+                    success_metric: "میانگین امتیاز احوالپرسی ≥ ۸۰".into(),
+                    follow_up_due_at: now + chrono::Duration::days(7),
+                    follow_up_review_count: 2,
+                    status: "draft".into(),
+                    acknowledged_at: None,
+                    acknowledged_note: None,
+                    closed_at: None,
+                    closed_outcome: None,
+                    escalated_at: None,
+                };
+                self.create_coaching_plan(&cp1).await?;
+
+                // Plan 2: pending_acknowledgement
+                let cp2 = CoachingPlan {
+                    id: self.next_id("coaching_plans_id_seq").await?,
+                    agent_id: agent_ids[1].clone(),
+                    interaction_id: int_ids[1].clone(),
+                    created_by: "demo_admin".into(),
+                    created_at: now - chrono::Duration::days(1),
+                    coaching_theme: "مدیریت اعتراض مشتری".into(),
+                    behavior_gap: "کارشناس در مواجهه با اعتراض، دفاعی می‌شود و اصرار دارد تا پذیرش اعتراض".into(),
+                    evidence: format!("مکالمه {} — دقیقه ۲ تا ۴", int_ids[1]),
+                    root_cause: "کمبود مهارت گوش دادن فعال و احساسات‌مدیریت".into(),
+                    customer_impact: "اعتراض تشدید شده و مشتری تهدید به شکایت کرده است".into(),
+                    practice_activity: "مشاهده ویدیوی نمونه مدیریت اعتراض + تمرین".into(),
+                    success_metric: "نرخ حل اعتراض در تماس اول ≥ ۷۰٪".into(),
+                    follow_up_due_at: now + chrono::Duration::days(5),
+                    follow_up_review_count: 3,
+                    status: "pending_acknowledgement".into(),
+                    acknowledged_at: None,
+                    acknowledged_note: None,
+                    closed_at: None,
+                    closed_outcome: None,
+                    escalated_at: None,
+                };
+                self.create_coaching_plan(&cp2).await?;
+
+                // Plan 3: acknowledged (in progress)
+                let cp3 = CoachingPlan {
+                    id: self.next_id("coaching_plans_id_seq").await?,
+                    agent_id: agent_ids[0].clone(),
+                    interaction_id: int_ids[2].clone(),
+                    created_by: "demo_admin".into(),
+                    created_at: now - chrono::Duration::days(3),
+                    coaching_theme: "کامل کردن پرونده و مستندسازی".into(),
+                    behavior_gap: "اطلاعات ضروری مشتری (کد ملی، شماره تماس، آدرس) در سیستم ثبت نشده است".into(),
+                    evidence: format!("مکالمه {} — پرونده ناقص", int_ids[2]),
+                    root_cause: "بی‌توجهی به چک‌لیست ورود اطلاعات".into(),
+                    customer_impact: "نیاز به تماس مجدد برای تکمیل اطلاعات، افزایش زمان پردازش".into(),
+                    practice_activity: "بررسی چک‌لیست + تکمیل پرونده ۵ نمونه".into(),
+                    success_metric: "نرخ پرونده‌های کامل در اولین بار ≥ ۹۰٪".into(),
+                    follow_up_due_at: now + chrono::Duration::days(10),
+                    follow_up_review_count: 2,
+                    status: "acknowledged".into(),
+                    acknowledged_at: Some(now - chrono::Duration::days(1)),
+                    acknowledged_note: Some("برنامه تایید و آغاز شد".into()),
+                    closed_at: None,
+                    closed_outcome: None,
+                    escalated_at: None,
+                };
+                self.create_coaching_plan(&cp3).await?;
+
+                // Plan 4: closed (successful)
+                let cp4 = CoachingPlan {
+                    id: self.next_id("coaching_plans_id_seq").await?,
+                    agent_id: agent_ids[2].clone(),
+                    interaction_id: int_ids[3].clone(),
+                    created_by: "demo_admin".into(),
+                    created_at: now - chrono::Duration::days(5),
+                    coaching_theme: "فروش متقاطع (Cross-sell) مناسب".into(),
+                    behavior_gap: "کارشناس محصولات مکمل را بر اساس نیاز مشتری پیشنهاد نمی‌دهد".into(),
+                    evidence: format!("مکالمه {} — فرصت فروش از دست رفته", int_ids[3]),
+                    root_cause: "نشناختن سیگنال‌های نیاز مشتری".into(),
+                    customer_impact: "از دست رفتن درآمد و کاهش سهم کیف پول مشتری".into(),
+                    practice_activity: "آموزش تشخیص سیگنال + نقش‌بازی فروش متقاطع".into(),
+                    success_metric: "نرخ پیشنهاد محصول مکمل ≥ ۶۰٪".into(),
+                    follow_up_due_at: now - chrono::Duration::days(2),
+                    follow_up_review_count: 2,
+                    status: "closed".into(),
+                    acknowledged_at: Some(now - chrono::Duration::days(4)),
+                    acknowledged_note: Some("شروع شد".into()),
+                    closed_at: Some(now - chrono::Duration::days(1)),
+                    closed_outcome: Some("improved".into()),
+                    escalated_at: None,
+                };
+                self.create_coaching_plan(&cp4).await?;
+
+                // Plan 5: escalated (overdue)
+                let cp5 = CoachingPlan {
+                    id: self.next_id("coaching_plans_id_seq").await?,
+                    agent_id: agent_ids[1].clone(),
+                    interaction_id: int_ids[4].clone(),
+                    created_by: "demo_admin".into(),
+                    created_at: now - chrono::Duration::days(10),
+                    coaching_theme: "تأیید هویت و امنیت".into(),
+                    behavior_gap: "مراحل تأیید هویت (شامل پرسش امنیتی) انجام نشده است".into(),
+                    evidence: format!("مکالمه {} — عدم تأیید هویت کامل", int_ids[4]),
+                    root_cause: "آشنایی ناکافی با پروتکل امنیتی".into(),
+                    customer_impact: "ریسک امنیتی و نقض مقررات بانک مرکزی".into(),
+                    practice_activity: "مرور پروتکل امنیتی + تست عملی".into(),
+                    success_metric: "نرخ تأیید هویت کامل ۱۰۰٪".into(),
+                    follow_up_due_at: now - chrono::Duration::days(5),
+                    follow_up_review_count: 2,
+                    status: "escalated".into(),
+                    acknowledged_at: Some(now - chrono::Duration::days(8)),
+                    acknowledged_note: Some("ارجاع شد".into()),
+                    closed_at: None,
+                    closed_outcome: None,
+                    escalated_at: Some(now - chrono::Duration::days(1)),
+                };
+                self.create_coaching_plan(&cp5).await?;
+
+                // ---------- Calibration Sessions (Persian) ----------
+                // Session 1: completed (with agreement rate)
+                let rubrics = self.list_rubrics().await?;
+                        let rubric_id = rubrics.first().map(|r| r.id.clone()).unwrap_or("1".into());
+
+                        // Session 1: completed (with agreement rate)
+                        let cs1 = CalibrationSession {
+                            id: self.next_id("calibration_sessions_id_seq").await?,
+                            name: "کالیبراسیون مهرماه — بخش بانک".into(),
+                            status: "completed".into(),
+                            rubric_id: rubric_id.clone(),
+                    reviewer_usernames: vec!["demo_admin".into(), "مریم کریمی".into(), "حسین نوری".into()],
+                    sample_interaction_ids: int_ids[0..3].to_vec(),
+                    target_agreement_rate: Some(0.8),
+                    min_reviewers_per_interaction: 2,
+                    deadline_at: now + chrono::Duration::days(30),
+                    meeting_started_at: Some(now - chrono::Duration::days(2)),
+                    facilitator_id: Some("demo_admin".into()),
+                    agreement_rate: Some(78.5),
+                    variance_per_criterion: Some(serde_json::json!({
+                        "احوالپرسی": {"max": 5.0, "min": 5.0, "variance": 0.0},
+                        "دقت اطلاعات": {"max": 3.0, "min": 3.0, "variance": 0.0},
+                        "حل مسئله": {"max": 4.0, "min": 2.0, "variance": 2.0}
+                    })),
+                    created_at: now - chrono::Duration::days(10),
+                };
+                self.create_calibration_session(&cs1).await?;
+
+                // Session 2: in_session (scoring phase)
+                let cs2 = CalibrationSession {
+                    id: self.next_id("calibration_sessions_id_seq").await?,
+                    name: "کالیبراسیون آبان ماه — بخش بیمه".into(),
+                    status: "in_session".into(),
+                    rubric_id: rubric_id.clone(),
+                    reviewer_usernames: vec!["demo_admin".into(), "زهرا موسوی".into()],
+                    sample_interaction_ids: int_ids[3..5].to_vec(),
+                    target_agreement_rate: Some(0.75),
+                    min_reviewers_per_interaction: 2,
+                    deadline_at: now + chrono::Duration::days(15),
+                    meeting_started_at: Some(now - chrono::Duration::hours(2)),
+                    facilitator_id: Some("demo_admin".into()),
+                    agreement_rate: None,
+                    variance_per_criterion: None,
+                    created_at: now - chrono::Duration::days(3),
+                };
+                self.create_calibration_session(&cs2).await?;
+
+                // Session 3: draft (ready to start)
+                let cs3 = CalibrationSession {
+                    id: self.next_id("calibration_sessions_id_seq").await?,
+                    name: "کالیبراسیون آذرماه — بخش سرمایه‌گذاری".into(),
+                    status: "draft".into(),
+                    rubric_id: rubric_id.clone(),
+                    reviewer_usernames: vec!["demo_admin".into(), "علی رضایی".into(), "مریم کریمی".into()],
+                    sample_interaction_ids: int_ids[4..6].to_vec(),
+                    target_agreement_rate: Some(0.85),
+                    min_reviewers_per_interaction: 2,
+                    deadline_at: now + chrono::Duration::days(45),
+                    meeting_started_at: None,
+                    facilitator_id: Some("demo_admin".into()),
+                    agreement_rate: None,
+                    variance_per_criterion: None,
+                    created_at: now,
+                };
+                self.create_calibration_session(&cs3).await?;
+
+                Ok(())
+            }
+        }
