@@ -86,10 +86,11 @@ body {
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  padding: 20px 0;
+  padding: 20px 0 0;
   position: sticky;
   top: 0;
   height: 100vh;
+  overflow-y: auto;
 }
 .sidebar-brand {
   display: flex; align-items: center; gap: 12px;
@@ -133,9 +134,13 @@ body {
   border-right-color: var(--primary);
 }
 .sidebar-footer {
-  padding: 16px 20px;
+  padding: 16px 20px 20px;
   border-top: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
 }
 .user-badge {
   font-size: 12px;
