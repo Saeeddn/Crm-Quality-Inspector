@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تست موبایل - کیفیت‌سنج CRM</title>
+<style>
+body { font-family: system-ui; background: #0f1117; color: #e2e8f0; margin: 0; padding: 20px; }
+.card { background: #1a1d2e; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+h2 { color: #6366f1; }
+.test-item { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.ok { color: #22c55e; }
+.fail { color: #ef4444; }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+th, td { padding: 12px; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.08); }
+th { background: rgba(255,255,255,0.05); font-size: 11px; text-transform: uppercase; }
+tr:hover { background: rgba(99,102,241,0.04); }
+@media (max-width: 768px) {
+  thead { display: none; }
+  tr, td { display: block; }
+  td { padding: 8px 0; position: relative; padding-right: 45%; }
+  td:before { content: attr(data-label); position: absolute; right: 0; width: 40%; font-weight: 600; color: #94a3b8; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+<h2>📱 تست ریسپانسیو موبایل</h2>
+<div class="card">
+<h3>✅ ویژگی‌های اضافه‌شده:</h3>
+<ul>
+<li><span class="ok">✓</span> دکمه منوی موبایل (☰ منو) در گوشه بالا-راست</li>
+<li><span class="ok">✓</span> منوی کشویی از راست با تمام تب‌ها</li>
+<li><span class="ok">✓</span> تبدیل جدول به کارت در عرض < 768px</li>
+<li><span class="ok">✓</span> data-label روی سلول‌های جدول‌ها</li>
+<li><span class="ok">✓</span> KPI grid: 3 ستون در تبلت، 2 ستون در موبایل</li>
+<li><span class="ok">✓</span> فیلتربار تک‌ستونه در موبایل</li>
+<li><span class="ok">✓</span> مودال تمام‌صفحه در موبایل</li>
+</ul>
+</div>
+<div class="card">
+<h3>📊 نمونه جدول تعاملات:</h3>
+<table class="data-table">
+<thead><tr><th>تاریخ</th><th>کارشناس</th><th>مشتری</th><th>کانال</th><th>موضوع</th><th>امتیاز</th><th>عملیات</th></tr></thead>
+<tbody>
+<tr>
+<td data-label="تاریخ">۱۴۰۵/۰۶/۱۷</td>
+<td data-label="کارشناس">علی رضایی</td>
+<td data-label="مشتری">شرکت آلفا</td>
+<td data-label="کانال"><span class="pill pill-muted">تلفن</span></td>
+<td data-label="موضوع"><b>پیگیری سفارش</b><div style="color:#94a3b8;font-size:12px;margin-top:2px">مشتری درباره وضعیت سفارش پرسش کرد...</div></td>
+<td data-label="امتیاز"><span class="pill pill-good">۸۵</span></td>
+<td data-label="عملیات" class="row-actions"><button class="btn btn-sm btn-primary">بازبینی</button></td>
+</tr>
+<tr>
+<td data-label="تاریخ">۱۴۰۵/۰۶/۱۶</td>
+<td data-label="کارشناس">سارا محمدی</td>
+<td data-label="مشتری">بانک باتا</td>
+<td data-label="کانال"><span class="pill pill-info">حضوری</span></td>
+<td data-label="موضوع"><b>مشتری ناراضی</b><div style="color:#94a3b8;font-size:12px;margin-top:2px">مشتری از سرویس دهی ناراضی بود...</div></td>
+<td data-label="امتیاز"><span class="pill pill-warning">۶۲</span></td>
+<td data-label="عملیات" class="row-actions"><button class="btn btn-sm">مشاهده</button></td>
+</tr>
+</tbody>
+</table>
+<p style="font-size:12px;color:#94a3b8">👆 در حالت موبایل (زیر 768px)، ستون‌ها مخفی شده و هر ردیف به صورت کارت نمایش داده می‌شود.</p>
+</div>
+</body>
+</html>
