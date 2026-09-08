@@ -387,9 +387,9 @@ function switchTab(tab) {
   $$('.nav-item').forEach(n => n.classList.remove('active'));
   $('#page-' + tab).classList.remove('hidden');
   $(`.nav-item[data-tab="${tab}"]`)?.classList.add('active');
-  $('#topbarTitle').textContent = {
+  $('#topbarTitle').innerHTML = {
     dashboard: 'داشبورد', interactions: 'تعاملات', agents: 'کارشناسان',
-    customers: 'مشتریان', risk: 'سلامت مشتریان', recommendations: 'پیشنهادهای QA', issues: 'ایرادات',
+    customers: 'مشتریان', risk: 'سلامت مشتریان', recommendations: 'پیشنهاد<span dir="ltr" class="qa-label">QA</span>', issues: 'ایرادات',
     rubrics: 'پارامترهای اندازهگیری', report: 'گزارش کارشناس',
         users: 'مدیریت کاربران', coaching: 'برنامههای آموزشی', calibration: 'کالیبراسیون',
       }[tab] || tab;
