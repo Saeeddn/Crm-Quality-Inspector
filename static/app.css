@@ -494,6 +494,7 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
   .sidebar { display: none; }
   .filter-bar { grid-template-columns: 1fr; }
   .page { padding: 12px; }
+  .main { margin-top: 0; } /* Remove margin for mobile */
   .topbar { 
     padding: 12px; 
     gap: 8px;
