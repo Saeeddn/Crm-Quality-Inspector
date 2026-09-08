@@ -65,6 +65,44 @@
 
   <main class="main">
 
+    <!-- Mobile menu button -->
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="منو">
+      <span>☰</span>
+      <span>منو</span>
+    </button>
+
+    <!-- Mobile nav overlay -->
+    <div class="mobile-nav-overlay" id="mobileNavOverlay"></div>
+
+    <!-- Mobile navigation panel -->
+    <nav class="mobile-nav" id="mobileNav">
+      <div class="mobile-nav-header">
+        <div class="brand-mark" style="width:32px;height:32px;font-size:16px">Q</div>
+        <div>
+          <div class="brand-title" style="font-size:13px">Quality Inspector</div>
+          <div class="brand-sub" style="font-size:10px">سامانه ارزیابی کیفیت</div>
+        </div>
+        <button class="mobile-nav-close" id="mobileNavClose" aria-label="بستن منو">×</button>
+      </div>
+      <div class="mobile-nav-items">
+        <a class="mobile-nav-item active" data-tab="dashboard">📊 داشبورد</a>
+        <a class="mobile-nav-item" data-tab="interactions">💬 تعاملات</a>
+        <a class="mobile-nav-item" data-tab="agents">👥 کارشناسان</a>
+        <a class="mobile-nav-item" data-tab="customers">🏢 مشتریان</a>
+        <a class="mobile-nav-item" data-tab="risk">⚠️ سلامت مشتریان</a>
+        <a class="mobile-nav-item" data-tab="recommendations">💡 پیشنهادهای QA</a>
+        <a class="mobile-nav-item" data-tab="issues">🐛 ایرادات</a>
+        <a class="mobile-nav-item" data-tab="coaching">📚 برنامههای آموزشی</a>
+        <a class="mobile-nav-item" data-tab="calibration">⚖️ کالیبراسیون</a>
+        <a class="mobile-nav-item" data-tab="rubrics">📋 استاندارد‌ها</a>
+        <a class="mobile-nav-item" data-tab="report">📈 گزارش کارشناس</a>
+        <a class="mobile-nav-item" data-tab="users">🔐 کاربران</a>
+        <div style="padding:16px 20px;border-top:1px solid var(--border)">
+          <button id="mobileLogoutBtn" class="btn btn-ghost btn-sm" style="width:100%">خروج</button>
+        </div>
+      </div>
+    </nav>
+
     <!-- Top bar -->
     <header class="topbar">
       <div class="topbar-title" id="topbarTitle">داشبورد</div>
@@ -317,6 +355,6 @@
 
 <script src="/static/jquery.js"></script>
 <script src="/static/chart.js"></script>
-<script src="/static/app.js?v=14"></script>
+<script src="/static/app.js?v=15"></script>
 </body>
 </html>

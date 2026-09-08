@@ -410,6 +410,46 @@ function switchTab(tab) {
 $$('.nav-item').forEach(n => n.addEventListener('click', () => switchTab(n.dataset.tab)));
 $('#logoutBtn').addEventListener('click', logout);
 
+// ============ Mobile Navigation ============
+const mobileMenuBtn = $('#mobileMenuBtn');
+const mobileNav = $('#mobileNav');
+const mobileNavOverlay = $('#mobileNavOverlay');
+const mobileNavClose = $('#mobileNavClose');
+const mobileLogoutBtn = $('#mobileLogoutBtn');
+
+if (mobileMenuBtn) {
+  mobileMenuBtn.addEventListener('click', () => {
+    mobileNav.classList.add('open');
+    mobileNavOverlay.classList.add('active');
+  });
+}
+
+function closeMobileNav() {
+  mobileNav.classList.remove('open');
+  mobileNavOverlay.classList.remove('active');
+}
+
+if (mobileNavClose) {
+  mobileNavClose.addEventListener('click', closeMobileNav);
+}
+if (mobileNavOverlay) {
+  mobileNavOverlay.addEventListener('click', closeMobileNav);
+}
+if (mobileLogoutBtn) {
+  mobileLogoutBtn.addEventListener('click', () => {
+    closeMobileNav();
+    logout();
+  });
+}
+
+// Sync mobile nav items with desktop navigation
+$$('.mobile-nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    switchTab(item.dataset.tab);
+    closeMobileNav();
+  });
+});
+
 // ============ Dashboard ============
 function renderDashboard() {
   const d = State.dashboard || {};
@@ -648,13 +688,13 @@ function renderInteractions() {
     const agent = State.agents.find(a => a.id === i.agent_id);
     const customer = State.customers.find(c => c.id === i.customer_id);
     return `<tr>
-      <td>${fmtDate(i.created_at)}</td>
-      <td>${esc(agent?.name || '-')}</td>
-      <td>${esc(customer?.name || '-')}</td>
-      <td><span class="pill pill-muted">${esc(i.channel)}</span></td>
-      <td><b>${esc(i.subject)}</b><div style="color:var(--text-muted);font-size:12px;margin-top:2px">${esc((i.transcript || '').slice(0, 80))}${(i.transcript || '').length > 80 ? '…' : ''}</div></td>
-      <td>${scorePill(s?.overall_score, s?.critical_fail)}</td>
-      <td class="row-actions">
+      <td data-label="تاریخ">${fmtDate(i.created_at)}</td>
+      <td data-label="کارشناس">${esc(agent?.name || '-')}</td>
+      <td data-label="مشتری">${esc(customer?.name || '-')}</td>
+      <td data-label="کانال"><span class="pill pill-muted">${esc(i.channel)}</span></td>
+      <td data-label="موضوع"><b>${esc(i.subject)}</b><div style="color:var(--text-muted);font-size:12px;margin-top:2px">${esc((i.transcript || '').slice(0, 80))}${(i.transcript || '').length > 80 ? '...' : ''}</div></td>
+      <td data-label="امتیاز">${scorePill(s?.overall_score, s?.critical_fail)}</td>
+      <td class="row-actions" data-label="عملیات">
         <button class="btn btn-sm btn-primary" data-auto="${i.id}">${s ? 'بازبینی' : 'ارزیابی خودکار'}</button>
         <button class="btn btn-sm" data-view="${i.id}">مشاهده</button>
       </td>
@@ -878,11 +918,11 @@ function renderAgents() {
   if (!tbody) return;
   tbody.innerHTML = State.agents.map(a => `
     <tr>
-      <td><b>${esc(a.name)}</b></td>
-      <td><span class="pill pill-info">${esc(a.department)}</span></td>
-      <td>${esc(a.position)}</td>
+      <td data-label="نام"><b>${esc(a.name)}</b></td>
+      <td data-label="واحد"><span class="pill pill-info">${esc(a.department)}</span></td>
+      <td data-label="سمت">${esc(a.position)}</td>
       <td>${a.active ? '<span class="pill pill-good">فعال</span>' : '<span class="pill pill-muted">غیرفعال</span>'}</td>
-      <td class="row-actions">
+      <td class="row-actions" data-label="عملیات">
         <button class="btn btn-sm" data-toggle-agent="${a.id}" data-active="${!a.active}">${a.active ? 'غیرفعال' : 'فعال'}</button>
         <button class="btn btn-sm btn-primary" data-agent-report="${a.id}">گزارش</button>
       </td>
@@ -931,7 +971,7 @@ function renderCustomers() {
       <td>${esc(c.phone)}</td>
       <td><span class="pill pill-info">${esc(c.product_type)}</span></td>
       <td>${esc(c.segment)}</td>
-      <td class="row-actions">
+      <td class="row-actions" data-label="عملیات">
         <button class="btn btn-sm" data-edit-customer="${c.id}">ویرایش</button>
         <button class="btn btn-sm" data-del-customer="${c.id}">حذف</button>
       </td>
@@ -1182,7 +1222,7 @@ function renderIssues() {
       <td style="max-width:360px">${esc(x.description)}${x.root_cause ? `<div style="color:var(--text-muted);font-size:12px;margin-top:4px"><b>علت:</b> ${esc(x.root_cause)}</div>` : ''}</td>
       <td>${statusPill(x.status)}</td>
       <td>${x.due_at ? fmtDate(x.due_at) : '-'}</td>
-      <td class="row-actions">
+      <td class="row-actions" data-label="عملیات">
         ${x.status === 'باز' ? `<button class="btn btn-sm btn-success" data-resolve-issue="${x.id}">CAPA</button>` : '<span style="color:var(--text-muted);font-size:12px">بسته شد</span>'}
       </td>
     </tr>`;
@@ -1300,7 +1340,7 @@ function renderUsers() {
       <td><b>${esc(u.username)}</b></td>
       <td>${u.is_admin ? '<span class="pill pill-info">مدیر سیستم</span>' : '<span class="pill pill-muted">کاربر عادی</span>'}</td>
       <td>${fmtDate(u.created_at)}</td>
-      <td class="row-actions">
+      <td class="row-actions" data-label="عملیات">
         <button class="btn btn-sm" data-edit-user="${u.username}">تغییر رمز / نقش</button>
         <button class="btn btn-sm" data-del-user="${u.username}">حذف</button>
       </td>
@@ -1533,7 +1573,7 @@ function renderCoaching() {
       <td title="${esc(p.customer_impact)}">${esc(p.customer_impact || '-')}</td>
       <td>${esc(p.success_metric || '-')}</td>
       <td>${fmtDate(p.follow_up_due_at)}</td>
-      <td class="row-actions">${renderCoachingActions(p)}</td>
+      <td class="row-actions" data-label="عملیات">${renderCoachingActions(p)}</td>
     </tr>`;
   }).join('');
 
@@ -1702,13 +1742,13 @@ function renderCalibration() {
     const pill = CAL_STATUS_PILL[s.status] || 'pill-muted';
     const rate = s.agreement_rate != null ? (s.agreement_rate * 100).toFixed(1) + '%' : '—';
     return `<tr>
-      <td><span class="pill ${pill}">${esc(CAL_STATUS_LABEL[s.status] || s.status)}</span></td>
-      <td>${esc(s.name)}</td>
-      <td>${esc(s.rubric_id || '-')}</td>
-      <td>${(s.sample_interaction_ids || []).length}</td>
-      <td><b>${rate}</b></td>
-      <td>${fmtDate(s.deadline_at)}</td>
-      <td class="row-actions">${renderCalibrationActions(s)}</td>
+      <td data-label="وضعیت"><span class="pill ${pill}">${esc(CAL_STATUS_LABEL[s.status] || s.status)}</span></td>
+      <td data-label="نام جلسه">${esc(s.name)}</td>
+      <td data-label="استاندارد">${esc(s.rubric_id || '-')}</td>
+      <td data-label="نمونه‌ها">${(s.sample_interaction_ids || []).length}</td>
+      <td data-label="توافق"><b>${rate}</b></td>
+      <td data-label="مهلت">${fmtDate(s.deadline_at)}</td>
+      <td class="row-actions" data-label="عملیات">${renderCalibrationActions(s)}</td>
     </tr>`;
   }).join('');
 
