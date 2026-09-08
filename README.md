@@ -36,6 +36,8 @@ A modern, high-performance call center quality assurance (QA) platform built for
 ### 🎨 UX
 - Modern dark RTL interface (Linear/Vercel-inspired)
 - Persian/Farsi native support
+- **Mobile-responsive design** — full slide-out navigation panel with all 12 tabs, card-style table layout on small screens
+- **User badge in topbar** — current username displayed on mobile; also shown in sidebar footer on desktop
 - **Token expiry toast** — "نشست شما منقضی شده" + redirect to login
 - Modal-based scoring with 7-slider rubric
 - Filter interactions by channel, agent, status
@@ -101,7 +103,7 @@ This is the easiest path — one command brings up PostgreSQL + the app.
 
 ```bash
 # 1. Clone
-git clone https://github.com/Saeeddn/crm-quality-inspector.git
+git clone https://github.com/Saeeddn/Crm-Quality-Inspector.git
 cd crm-quality-inspector
 
 # 2. Create .env from template
@@ -131,7 +133,7 @@ Open http://localhost:3000 and log in with the `ADMIN_USERNAME` and `ADMIN_PASSW
 
 ```bash
 # 1. Clone
-git clone https://github.com:Saeeddn/crm-quality-inspector.git
+git clone git@github.com:Saeeddn/Crm-Quality-Inspector.git
 cd crm-quality-inspector
 
 # 2. Set up PostgreSQL (or use a remote one)
@@ -377,7 +379,7 @@ Before exposing this app to the public internet:
 - [ ] Real-time sentiment analysis (WebSocket stream)
 - [ ] Multi-tenant support (organization isolation)
 - [ ] Audit log + compliance trail
-- [ ] Mobile-responsive UI for supervisors
+- [x] **Mobile-responsive UI** — full slide-out navigation panel with all 12 tabs, card-style table layout on small screens, mobile topbar with menu button and user badge
 - [ ] Integration with telephony (Asterisk AMI, FreeSWITCH)
 - [ ] Persian speech-to-text (Vosk integration)
 - [ ] Grafana metrics export
