@@ -489,18 +489,7 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
 .toast.error { border-left-color: var(--danger); }
 @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-@media (max-width: 900px) {
-  .app-shell { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
-  .filter-bar { grid-template-columns: 1fr; }
-  .page { padding: 12px; }
-  .main { margin-top: 0; } /* Remove margin for mobile */
-  .topbar { 
-    padding: 12px; 
-    gap: 8px;
-  }
-  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-}
+
 
 /* ================== Mobile Responsive ================== */
 /* Base style - hidden by default */
