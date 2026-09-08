@@ -513,6 +513,7 @@ textarea { min-height: 80px; resize: vertical; width: 100%; }
 /* ================== Mobile Responsive ================== */
 .mobile-menu-btn {
   display: none;
+  position: static; /* Not fixed - use normal flow */
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
