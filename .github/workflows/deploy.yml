@@ -42,26 +42,15 @@ jobs:
 
       - name: Create .env on server
         run: |
-          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "echo 'DATABASE_URL=${{ env.DATABASE_URL }}' > $PROJECT_DIR/.env && echo 'ADMIN_USERNAME=${{ env.ADMIN_USERNAME }}' >> $PROJECT_DIR/.env && echo 'ADMIN_PASSWORD=${{ env.ADMIN_PASSWORD }}' >> $PROJECT_DIR/.env && echo 'SERVER_HOST=0.0.0.0' >> $PROJECT_DIR/.env && echo 'SERVER_PORT=${{ env.SERVER_PORT }}' >> $PROJECT_DIR/.env && echo 'LOG_FILE=${{ env.LOG_FILE }}' >> $PROJECT_DIR/.env"
+          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "echo 'DATABASE_URL=${{ env.DATABASE_URL }}' > ${{ env.PROJECT_DIR }}/.env && echo 'ADMIN_USERNAME=${{ env.ADMIN_USERNAME }}' >> ${{ env.PROJECT_DIR }}/.env && echo 'ADMIN_PASSWORD=${{ env.ADMIN_PASSWORD }}' >> ${{ env.PROJECT_DIR }}/.env && echo 'SERVER_HOST=0.0.0.0' >> ${{ env.PROJECT_DIR }}/.env && echo 'SERVER_PORT=${{ env.SERVER_PORT }}' >> ${{ env.PROJECT_DIR }}/.env && echo 'LOG_FILE=${{ env.LOG_FILE }}' >> ${{ env.PROJECT_DIR }}/.env"
 
       - name: Build and start on server
         run: |
-          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} << 'EOF'
-            set -e
-            cd $PROJECT_DIR
-            
-            # Ensure log directory exists with correct permissions
-            mkdir -p /root/crm-qi-logs
-            chown 999:999 /root/crm-qi-logs
-            
-            # Stop old container and rebuild
-            docker compose down --remove-orphans 2>/dev/null || true
-            docker compose up -d --build
-            
-            echo ""
-            echo "=== Deployment Complete ==="
-            docker ps --filter "name=crm-quality-inspector"
-            echo ""
-            echo "App: http://${{ env.SERVER_HOST }}:3000"
-            echo "Health: curl http://${{ env.SERVER_HOST }}:3000/api/health"
-          EOF
+          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "cd ${{ env.PROJECT_DIR }} && mkdir -p /root/crm-qi-logs && chown 999:999 /root/crm-qi-logs && docker compose down --remove-orphans 2>/dev/null || true && docker compose up -d --build"
+        env:
+          DOCKER_BUILDKIT: 1
+
+      - name: Verify deployment
+        run: |
+          sleep 5
+          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "docker ps --filter 'name=crm-quality-inspector' && curl -s http://127.0.0.1:3000/api/health"
