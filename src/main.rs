@@ -17,21 +17,24 @@ async fn main() {
     let _ = std::io::Write::flush(&mut std::io::stderr());
 
     // Initialize tracing — write to both stderr (Hermes terminal) and a log file on disk.
-    // Log level controlled by LOG_LEVEL env var: trace, debug, info, warn, error (default: info).
-    let log_level = std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
+    // Log level controlled by LOG_LEVEL env var: trace, debug, info, warn, error (default: debug).
+    let log_level = std::env::var("LOG_LEVEL").unwrap_or_else(|_| "debug".to_string());
     let env_filter = format!("crm_qi={}", log_level);
     let env_filter = tracing_subscriber::EnvFilter::try_new(env_filter)
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"));
 
-    // File layer — logs appended to crm-quality-inspector.log
+    // File layer — logs appended to crm-quality-inspector.log with auto-flush
     let logfile = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open("crm-quality-inspector.log")
         .expect("failed to open log file");
+    // Use non-blocking writer to avoid IO stalls and enable auto-flush
+    let (file_writer, _guard) = tracing_appender::non_blocking(logfile);
     let file_layer = tracing_subscriber::fmt::layer()
         .with_target(false)
-        .with_writer(logfile);
+        .with_writer(file_writer)
+        .with_ansi(false);
 
     // Stderr layer — for Hermes terminal visibility
     let stderr_layer = tracing_subscriber::fmt::layer()
