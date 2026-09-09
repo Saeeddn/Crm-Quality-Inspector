@@ -91,7 +91,10 @@ body {
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
+.sidebar::-webkit-scrollbar { display: none; }
 .sidebar-brand {
   display: flex; align-items: center; gap: 12px;
   padding: 0 20px 20px;
