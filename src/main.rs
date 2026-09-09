@@ -16,19 +16,33 @@ async fn main() {
     eprintln!("[boot] dotenv loaded");
     let _ = std::io::Write::flush(&mut std::io::stderr());
 
-    // Initialize tracing — write to stderr, line-buffered so we see it in Hermes terminal.
+    // Initialize tracing — write to both stderr (Hermes terminal) and a log file on disk.
     // Log level controlled by LOG_LEVEL env var: trace, debug, info, warn, error (default: info).
     let log_level = std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
     let env_filter = format!("crm_qi={}", log_level);
     let env_filter = tracing_subscriber::EnvFilter::try_new(env_filter)
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
+    // File layer — logs appended to crm-quality-inspector.log
+    let logfile = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("crm-quality-inspector.log")
+        .expect("failed to open log file");
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_target(false)
+        .with_writer(logfile);
+
+    // Stderr layer — for Hermes terminal visibility
+    let stderr_layer = tracing_subscriber::fmt::layer()
+        .with_target(false)
+        .with_writer(std::io::stderr)
+        .with_ansi(cfg!(not(test)));
+
     tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer()
-            .with_target(false)
-            .with_writer(std::io::stderr)
-            .with_ansi(cfg!(not(test)))
-        )
         .with(env_filter)
+        .with(file_layer)
+        .with(stderr_layer)
         .init();
     eprintln!("[boot] tracing initialized");
     let _ = std::io::Write::flush(&mut std::io::stderr());
