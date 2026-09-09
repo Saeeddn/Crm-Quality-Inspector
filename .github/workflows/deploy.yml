@@ -38,14 +38,22 @@ jobs:
 
       - name: Create env on server
         run: |
-          PASSWORD=${{ env.DB_PASSWORD }}
-          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} 'echo "DATABASE_URL=postgres://crm_quality:'"$PASSWORD"'@127.0.0.1:5432/crm_quality_inspector" > '"$PROJECT_DIR"'/'.env'; echo "ADMIN_USERNAME=admin" >> '"$PROJECT_DIR"'/'.env'; echo "ADMIN_PASSWORD='"$PASSWORD"'" >> '"$PROJECT_DIR"'/'.env'; echo "SERVER_HOST=0.0.0.0" >> '"$PROJECT_DIR"'/'.env'; echo "SERVER_PORT=3000" >> '"$PROJECT_DIR"'/'.env'; echo "LOG_FILE=/var/log/crm-qi/crm-quality-inspector.log" >> '"$PROJECT_DIR"'/'.env''
+          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} << 'ENDSSH'
+            PASSWORD="${DB_PASSWORD}"
+            echo "DATABASE_URL=postgres://crm_quality:${PASSWORD}@127.0.0.1:5432/crm_quality_inspector" > "${PROJECT_DIR}/.env"
+            echo "ADMIN_USERNAME=admin" >> "${PROJECT_DIR}/.env"
+            echo "ADMIN_PASSWORD=${PASSWORD}" >> "${PROJECT_DIR}/.env"
+            echo "SERVER_HOST=0.0.0.0" >> "${PROJECT_DIR}/.env"
+            echo "SERVER_PORT=3000" >> "${PROJECT_DIR}/.env"
+            echo "LOG_FILE=/var/log/crm-qi/crm-quality-inspector.log" >> "${PROJECT_DIR}/.env"
+            echo "Created .env on server"
+          ENDSSH
 
       - name: Build and start on server
         run: |
-          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "cd $PROJECT_DIR && mkdir -p /root/crm-qi-logs && chown 999:999 /root/crm-qi-logs && docker compose down --remove-orphans 2>/dev/null || true && docker compose up -d --build"
+          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "cd ${{ env.PROJECT_DIR }} && mkdir -p /root/crm-qi-logs && chown 999:999 /root/crm-qi-logs && docker compose down --remove-orphans 2>/dev/null || true && docker compose up -d --build"
 
       - name: Verify deployment
         run: |
           sleep 10
-          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_HOST }}:3000/api/health"'
+          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "docker ps --filter 'name=crm-quality-inspector' && curl -s http://127.0.0.1:3000/api/health"
