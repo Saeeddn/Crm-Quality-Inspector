@@ -68,19 +68,19 @@ async function api(url, opts = {}) {
   if (r.status === 401) {
     // Avoid loops: only redirect if we still think we're logged in
     if (State.token) {
-      const reason = url === '/auth/login' ? 'نام کاربری یا رمز عبور اشتباه است' : 'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.';
+      const reason = url === '/auth/login' ? t('loginError') : t('toastLoginExpired');
       logout(reason);
     }
-    throw new Error('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
+    throw new Error(t('toastLoginExpired'));
   }
   const text = await r.text();
   if (!text) {
     if (r.ok) return null;
-    throw new Error('سرور پاسخ خالی داد (کد ' + r.status + ')');
+    throw new Error(t('toastDataLoaded'));
   }
   let j;
-  try { j = JSON.parse(text); } catch { throw new Error('پاسخ نامعتبر'); }
-  if (!j.success) throw new Error(j.error || 'خطا');
+  try { j = JSON.parse(text); } catch { throw new Error(t('invalidResponse')); }
+  if (!j.success) throw new Error(j.error || t('toastDataLoaded'));
   return j.data;
 }
 
@@ -93,7 +93,7 @@ function showLoading(text) {
   const ov = $('#loadingOverlay');
   if (!ov) return;
   if (text) $('#loadingText').textContent = text;
-  else $('#loadingText').textContent = 'در حال بارگذاری...';
+  else $('#loadingText').textContent = t('loadingAllLabel');
   ov.hidden = false;
 }
 function hideLoading() {
@@ -114,20 +114,20 @@ function fmtDate(iso) {
   catch { return iso; }
 }
 function scorePill(v, critical) {
-  if (v == null) return '<span class="pill pill-muted">ارزیابی‌نشده</span>';
+  if (v == null) return `<span class="pill pill-muted">${t('scoreNotEvaluated')}</span>`;
   const cls = critical ? 'pill-bad' : v >= 85 ? 'pill-good' : v >= 70 ? 'pill-info' : v >= 60 ? 'pill-warn' : 'pill-bad';
   return `<span class="pill ${cls}">${Number(v).toFixed(1)}${critical ? ' ⚠' : ''}</span>`;
 }
 function sevPill(s) {
-  const map = { 'بحرانی': 'pill-bad', 'بالا': 'pill-warn', 'متوسط': 'pill-info', 'پایین': 'pill-muted' };
+  const map = { [t('severityCritical')]: 'pill-bad', [t('severityHigh')]: 'pill-warn', [t('severityMedium')]: 'pill-info', [t('severityLow')]: 'pill-muted' };
   return `<span class="pill ${map[s] || 'pill-muted'}">${esc(s)}</span>`;
 }
 function statusPill(s) {
-  return s === 'باز' ? '<span class="pill pill-warn">باز</span>' : '<span class="pill pill-good">بسته</span>';
+  return s === t('isOpenStatus') ? `<span class="pill pill-warn">${t('isOpenStatus')}</span>` : `<span class="pill pill-good">${t('isClosedStatus')}</span>`;
 }
 function priorityPill(p) {
-  const map = { 'بالا': 'pill-bad', 'متوسط': 'pill-warn', 'پایین': 'pill-info' };
-  return `<span class="pill ${map[p] || 'pill-muted'}">اولویت ${esc(p)}</span>`;
+  const map = { [t('priorityHigh')]: 'pill-bad', [t('priorityMedium')]: 'pill-warn', [t('priorityLow')]: 'pill-info' };
+  return `<span class="pill ${map[p] || 'pill-muted'}">${t('priorityLabel')} ${esc(p)}</span>`;
 }
 function toast(msg, type = 'success') {
   const t = $('#toast');
@@ -144,7 +144,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
   const err = $('#loginError');
   err.classList.remove('show');
   try {
-    const data = await withLoading('در حال ورود...', () => api('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }));
+    const data = await withLoading(t('enteringLoginLabel'), () => api('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }));
     setToken(data.token, { username: data.username, is_admin: data.is_admin });
     enterApp();
   } catch (ex) {
@@ -192,7 +192,7 @@ async function loadDashboard() {
     // Agents is small (just names for chart labels), so we fetch it now too.
     // Full pagination of agents/customers/issues happens on tab switch.
     const [dash, scoresList, agentsData, interactionsData] = await Promise.all([
-      withLoading('در حال محاسبه KPI و نمودارها...', () => api('/reports/dashboard')),
+      withLoading(t('toastLoadDashboard'), () => api('/reports/dashboard')),
       api('/scores'),
       api('/agents?page=1&limit=1000'),
       api('/interactions?page=1&limit=1000')  // load for agent chart lookups
@@ -223,7 +223,7 @@ async function loadDashboard() {
       }
     }, 100);
   } catch (e) {
-    toast('خطا در بارگذاری داشبورد: ' + e.message, 'error');
+    toast(t('toastErrorDashboard') + e.message, 'error');
   }
 }
 
@@ -310,45 +310,45 @@ async function loadKpis() {
 }
 async function loadRecommendations() {
   if (State.loaded.rec) { renderRecommendations(); return; }
-  State.recommendations = await withLoading('در حال تحلیل ریسک و اولویت‌بندی...', () => api('/recommendations')); State.loaded.rec = true;
+  State.recommendations = await withLoading(t('toastLoadAnalysis'), () => api('/recommendations')); State.loaded.rec = true;
   renderRecommendations();
 }
 
 // ============ Customer Risk Score ============
 async function loadCustomerRisk(force = false) {
   if (!force && State.loaded.risk) { renderCustomerRisk(); return; }
-  State.customerRisk = await withLoading('در حال محاسبه ریسک مشتریان...', () => api('/customers/risk'));
+  State.customerRisk = await withLoading(t('toastLoadRisk'), () => api('/customers/risk'));
   State.loaded.risk = true;
   renderCustomerRisk();
 }
 
 function renderCustomerRisk() {
   const list = State.customerRisk || [];
-  const high = list.filter(c => c.level === 'بالا').length;
-  const med  = list.filter(c => c.level === 'متوسط').length;
-  const low  = list.filter(c => c.level === 'پایین').length;
+  const high = list.filter(c => c.level === t('riskHigh').split(' ')[0]).length;
+  const med  = list.filter(c => c.level === t('riskMed').split(' ')[0]).length;
+  const low  = list.filter(c => c.level === t('riskLow').split(' ')[0]).length;
 
   // KPIs (matches dashboard's .kpi/.kpi-value style)
   $('#riskKpiGrid').innerHTML = `
     <div class="kpi">
-      <div class="kpi-label">ریسک بالا</div>
+      <div class="kpi-label">${t('riskHigh')}</div>
       <div class="kpi-value kpi-red">${high}</div>
-      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">نیاز به تماس فوری</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">${t('riskHighSub')}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">ریسک متوسط</div>
+      <div class="kpi-label">${t('riskMed')}</div>
       <div class="kpi-value kpi-amber">${med}</div>
-      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">نیاز به پیگیری</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">${t('riskMedSub')}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">ریسک پایین</div>
+      <div class="kpi-label">${t('riskLow')}</div>
       <div class="kpi-value kpi-green">${low}</div>
-      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">نظارت عادی</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">${t('riskLowSub')}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">کل مشتریان</div>
+      <div class="kpi-label">${t('totalCustomersLabel')}</div>
       <div class="kpi-value">${list.length}</div>
-      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">با Risk Score</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--text-muted);margin-top:4px">${t('withRiskScoreLabel')}</div>
     </div>
   `;
 
@@ -368,15 +368,15 @@ function renderCustomerRisk() {
       `<div class="factor-chip" title="${esc(f.reason)}">${esc(f.label)} +${f.points.toFixed(0)}</div>`
     ).join('');
     const factorDetail = (c.factors || []).length > 2
-      ? `<span class="factor-chip" style="background:var(--surface-2)">+${c.factors.length - 2} بیشتر</span>`
+      ? `<span class="factor-chip" style="background:var(--surface-2)">+${c.factors.length - 2} ${t('moreLabel')}</span>`
       : '';
-    const levelClass = c.level === 'بالا' ? 'risk-high' : c.level === 'متوسط' ? 'risk-med' : 'risk-low';
-    const actionClass = c.level === 'بالا' ? 'badge-red' : c.level === 'متوسط' ? 'badge-amber' : 'badge-green';
+    const levelClass = c.level === t('riskHigh').split(' ')[0] ? 'risk-high' : c.level === t('riskMed').split(' ')[0] ? 'risk-med' : 'risk-low';
+    const actionClass = c.level === t('riskHigh').split(' ')[0] ? 'badge-red' : c.level === t('riskMed').split(' ')[0] ? 'badge-amber' : 'badge-green';
     return `
       <tr>
         <td><span class="risk-dot ${levelClass}" title="${score}"></span></td>
         <td><strong>${esc(c.customer_name)}</strong><br><span style="font-size:11px;color:var(--text-muted)">${lastDate}</span></td>
-        <td><strong style="font-size:18px;color:var(--${c.level === 'بالا' ? 'red' : c.level === 'متوسط' ? 'amber' : 'green'})">${score}</strong></td>
+        <td><strong style="font-size:18px;color:var(--${c.level === t('riskHigh').split(' ')[0] ? 'red' : c.level === t('riskMed').split(' ')[0] ? 'amber' : 'green'})">${score}</strong></td>
         <td><span class="badge ${actionClass}">${esc(c.level)}</span></td>
         <td>${c.scored_interactions || 0} / ${c.total_interactions || 0}</td>
         <td>${c.open_issues > 0 ? `<span class="badge badge-red">${c.open_issues}</span>` : '—'}</td>
@@ -388,17 +388,24 @@ function renderCustomerRisk() {
   }).join('');
 }
 
+// ============ Language Switcher ============
+function toggleLanguage() {
+  currentLang = currentLang === 'fa' ? 'en' : 'fa';
+  applyLanguage(currentLang);
+}
+
 function switchTab(tab) {
   $$('.page').forEach(p => p.classList.add('hidden'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
   $('#page-' + tab).classList.remove('hidden');
   $(`.nav-item[data-tab="${tab}"]`)?.classList.add('active');
-  $('#topbarTitle').innerHTML = {
-    dashboard: 'داشبورد', interactions: 'تعاملات', agents: 'کارشناسان',
-    customers: 'مشتریان', risk: 'سلامت مشتریان', recommendations: 'پیشنهاد<span dir="ltr" class="qa-label">QA</span>', issues: 'ایرادات',
-    rubrics: 'پارامترهای اندازهگیری', report: 'گزارش کارشناس',
-        users: 'مدیریت کاربران', coaching: 'برنامههای آموزشی', calibration: 'کالیبراسیون',
-      }[tab] || tab;
+  $('#topbarTitle').innerHTML = ({
+    dashboard: t('navDashboard'), interactions: t('navInteractions'), agents: t('navAgents'),
+    customers: t('navCustomers'), risk: t('navRisk'), recommendations: t('navRecommendations'),
+    issues: t('navIssues'), calibration: t('navCalibration'),
+    rubrics: t('navRubrics'), report: t('navReport'), coaching: t('navCoaching'),
+    users: t('navUsers'), audit: t('navAudit')
+  }[tab] || tab);
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'interactions') loadInteractions();
   else if (tab === 'agents') loadAgents();
@@ -461,21 +468,21 @@ $$('.mobile-nav-item').forEach(item => {
 function renderDashboard() {
   const d = State.dashboard || {};
   const kpis = [
-    { label: 'کارشناسان', value: d.agent_count, cls: 'primary' },
-    { label: 'مشتریان', value: d.customer_count, cls: 'info' },
-    { label: 'تعاملات', value: d.interaction_count, cls: 'primary' },
-    { label: 'پوشش ارزیابی', value: (d.coverage || 0).toFixed(1) + '%', cls: 'info' },
-    { label: 'میانگین کیفیت', value: (d.average_score || 0).toFixed(1), cls: d.average_score >= 80 ? 'success' : d.average_score >= 60 ? 'warning' : 'danger' },
-    { label: 'ایرادات باز', value: d.open_issues, cls: d.open_issues > 0 ? 'warning' : 'success' },
-    { label: 'شکست بحرانی', value: d.critical_failures, cls: d.critical_failures > 0 ? 'danger' : 'success' },
-    { label: 'گرید کیفیت', value: d.quality_grade, cls: 'primary' },
+    { label: t('kpiAgentsLabel'), value: d.agent_count, cls: 'primary' },
+    { label: t('kpiCustomersLabel'), value: d.customer_count, cls: 'info' },
+    { label: t('kpiInteractionsLabel'), value: d.interaction_count, cls: 'primary' },
+    { label: t('kpiCoverageLabel'), value: (d.coverage || 0).toFixed(1) + '%', cls: 'info' },
+    { label: t('kpiAvgScoreLabel'), value: (d.average_score || 0).toFixed(1), cls: d.average_score >= 80 ? 'success' : d.average_score >= 60 ? 'warning' : 'danger' },
+    { label: t('kpiOpenIssuesLabel'), value: d.open_issues, cls: d.open_issues > 0 ? 'warning' : 'success' },
+    { label: t('criticalFailLabel'), value: d.critical_failures, cls: d.critical_failures > 0 ? 'danger' : 'success' },
+    { label: t('kpiQualityGradeLabel'), value: d.quality_grade, cls: 'primary' },
   ];
   $('#kpiGrid').innerHTML = kpis.map(k =>
     `<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-value ${k.cls}">${k.value}</div></div>`
   ).join('');
   $('#coverageBar').innerHTML = `
     <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-      <span style="color:var(--text-muted)">${d.scored_count || 0} از ${d.interaction_count || 0} تعامل ارزیابی شده</span>
+      <span style="color:var(--text-muted)">${t('scoredCount', d.scored_count || 0, d.interaction_count || 0)}</span>
       <strong>${(d.coverage || 0).toFixed(1)}%</strong>
     </div>
     <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, d.coverage || 0)}%"></div></div>
@@ -494,7 +501,7 @@ function renderTrendChart() {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#8a92a6'; ctx.font = '14px Tahoma';
-    ctx.fillText('برای نمایش نمودار، حداقل ۲ ارزیابی لازم است', 10, 30);
+    ctx.fillText(t('chartNoData'), 10, 30);
     return;
   }
   const sorted = scores.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -503,7 +510,7 @@ function renderTrendChart() {
   State.trendChart = new Chart(canvas, {
     type: 'line',
     data: { labels, datasets: [{
-      label: 'میانگین امتیاز کیفیت',
+      label: t('avgQualityScore'),
       data,
       borderColor: '#6366f1',
       backgroundColor: 'rgba(99,102,241,0.15)',
@@ -533,7 +540,7 @@ function renderScoreChart(d) {
   State.scoreChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['سالم (≥80)', 'نیازمند بهبود (60-80)', 'بحرانی (<60)'],
+      labels: [t('healthyLabel'), t('needImproveLabel'), t('criticalLabel')],
       datasets: [{
         data: [healthy, improvement, critical],
         backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
@@ -566,7 +573,7 @@ function renderAgentChart() {
     data: {
       labels,
       datasets: [{
-        label: 'میانگین امتیاز',
+        label: t('kpiAvgScoreText'),
         data,
         backgroundColor: '#6366f1',
         borderRadius: 4
@@ -585,7 +592,7 @@ function renderAgentChart() {
 function renderPagination(selector, total, page, totalPages, onChange) {
   const el = document.querySelector(selector);
   if (!el) return;
-  if (total === 0) { el.innerHTML = '<span style="color:var(--text-muted);font-size:12px">بدون رکورد</span>'; return; }
+  if (total === 0) { el.innerHTML = `<span style="color:var(--text-muted);font-size:12px">${t('noRecordLabel')}</span>`; return; }
   const pageSize = State.pageSize || 10;
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
@@ -595,18 +602,18 @@ function renderPagination(selector, total, page, totalPages, onChange) {
   const sizeSelect = sizeOptions.includes(pageSize)
     ? `<select class="pager-size-select" style="padding:4px 8px;border-radius:6px;background:var(--surface-2);color:var(--foreground);border:1px solid var(--border)">
          ${sizeOptions.map(n => `<option value="${n}" ${n === pageSize ? 'selected' : ''}>${n}</option>`).join('')}
-         <option value="custom" ${!sizeOptions.includes(pageSize) ? 'selected' : ''}>سفارشی...</option>
+         <option value="custom" ${!sizeOptions.includes(pageSize) ? 'selected' : ''}>${t('customPageSize')}</option>
        </select>`
     : `<select class="pager-size-select" style="padding:4px 8px;border-radius:6px;background:var(--surface-2);color:var(--foreground);border:1px solid var(--border)">
          ${sizeOptions.map(n => `<option value="${n}">${n}</option>`).join('')}
-         <option value="custom" selected>سفارشی...</option>
+         <option value="custom" selected>${t('customPageSize')}</option>
        </select>`;
   const customInput = !sizeOptions.includes(pageSize)
-    ? `<input type="number" class="pager-size-custom" min="1" max="1000" value="${pageSize}" style="width:70px;padding:4px 8px;border-radius:6px;background:var(--surface-2);color:var(--foreground);border:1px solid var(--border);margin-right:4px" placeholder="تعداد" />`
+    ? `<input type="number" class="pager-size-custom" min="1" max="1000" value="${pageSize}" style="width:70px;padding:4px 8px;border-radius:6px;background:var(--surface-2);color:var(--foreground);border:1px solid var(--border);margin-right:4px" placeholder='${t("pageSizePlaceholder")}' />`
     : '';
   el.innerHTML =
     `<div class="pager-bar" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-       <span class="pager-info">نمایش <b>${start}–${end}</b> از <b>${total}</b> رکورد (صفحه ${page} از ${totalPages})</span>
+       <span class="pager-info">${t('pageInfoLabel')(start, end, total, page, totalPages)}</span>
        <div class="pager-buttons" style="display:flex;gap:4px">
          ${btn('« اول', 1, page === 1)}
          ${btn('‹ قبلی', page - 1, page === 1)}
@@ -614,7 +621,7 @@ function renderPagination(selector, total, page, totalPages, onChange) {
          ${btn('آخر »', totalPages, page === totalPages)}
        </div>
        <div class="pager-size" style="display:flex;align-items:center;gap:4px;margin-right:auto">
-         <span style="font-size:12px;color:var(--text-muted)">تعداد در صفحه:</span>
+         <span style="font-size:12px;color:var(--text-muted)">${t('pageSizeLabel')}</span>
          ${sizeSelect}
          ${customInput}
        </div>
@@ -631,7 +638,7 @@ function renderPagination(selector, total, page, totalPages, onChange) {
       const v = e.target.value;
       if (v === 'custom') {
         // Show prompt for custom value
-        const n = parseInt(prompt('تعداد در صفحه را وارد کنید (۱ تا ۱۰۰۰):', pageSize), 10);
+        const n = parseInt(prompt(t('pageSizePrompt'), pageSize), 10);
         if (n >= 1 && n <= 1000) {
           State.pageSize = n;
           State.page.interactions = 1;
@@ -661,7 +668,7 @@ function renderInteractions() {
 
   const sel = $('#fAgent');
   if (sel && sel.options.length <= 1 && State.agents.length) {
-    sel.innerHTML = '<option value="">همه کارشناسان</option>' + State.agents
+    sel.innerHTML = '<option value="">' + t('allAgentsOpt') + '</option>' + State.agents
       .filter(a => a.active).map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
   }
 
@@ -695,18 +702,18 @@ function renderInteractions() {
     const agent = State.agents.find(a => a.id === i.agent_id);
     const customer = State.customers.find(c => c.id === i.customer_id);
     return `<tr>
-      <td data-label="تاریخ">${fmtDate(i.created_at)}</td>
-      <td data-label="کارشناس">${esc(agent?.name || '-')}</td>
-      <td data-label="مشتری">${esc(customer?.name || '-')}</td>
-      <td data-label="کانال"><span class="pill pill-muted">${esc(i.channel)}</span></td>
-      <td data-label="موضوع"><b>${esc(i.subject)}</b><div style="color:var(--text-muted);font-size:12px;margin-top:2px">${esc((i.transcript || '').slice(0, 80))}${(i.transcript || '').length > 80 ? '...' : ''}</div></td>
-      <td data-label="امتیاز">${scorePill(s?.overall_score, s?.critical_fail)}</td>
-      <td class="row-actions" data-label="عملیات">
-        <button class="btn btn-sm btn-primary" data-auto="${i.id}">${s ? 'بازبینی' : 'ارزیابی خودکار'}</button>
-        <button class="btn btn-sm" data-view="${i.id}">مشاهده</button>
+      <td data-label='${t("colDate")}'>${fmtDate(i.created_at)}</td>
+      <td data-label='${t("colAgent")}'>${esc(agent?.name || '-')}</td>
+      <td data-label='${t("colCustomer")}'>${esc(customer?.name || '-')}</td>
+      <td data-label='${t("colChannel")}'><span class="pill pill-muted">${esc(i.channel)}</span></td>
+      <td data-label='${t("colSubject")}'><b>${esc(i.subject)}</b><div style="color:var(--text-muted);font-size:12px;margin-top:2px">${esc((i.transcript || '').slice(0, 80))}${(i.transcript || '').length > 80 ? '...' : ''}</div></td>
+      <td data-label='${t("colScore")}'>${scorePill(s?.overall_score, s?.critical_fail)}</td>
+      <td class="row-actions" data-label='${t("colActions")}'>
+        <button class="btn btn-sm btn-primary" data-auto="${i.id}">${s ? t('reviewBtn') : t('autoScoreBtn')}</button>
+        <button class="btn btn-sm" data-view="${i.id}">${t('viewInterBtn')}</button>
       </td>
     </tr>`;
-  }).join('') || `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">تعاملی یافت نشد</td></tr>`;
+  }).join('') || `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">${t('emptyTable')}</td></tr>`;
 
   tbody.querySelectorAll('[data-auto]').forEach(b => b.addEventListener('click', () => openAutoScore(b.dataset.auto)));
   tbody.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => openView(b.dataset.view)));
@@ -725,15 +732,15 @@ $('#fStatus')?.addEventListener('change', renderInteractions);
 $('#exportCsvBtn')?.addEventListener('click', exportCsv);
 
 function exportCsv() {
-  if (!State.interactions.length) { toast('ابتدا تعاملات را بارگذاری کنید', 'error'); return; }
-  const rows = [['شناسه', 'تاریخ', 'کارشناس', 'مشتری', 'کانال', 'موضوع', 'امتیاز', 'سطح', 'بحرانی', 'یادداشت']];
+  if (!State.interactions.length) { toast(t('toastAuthRequired'), 'error'); return; }
+  const rows = [t('exportCsvHeaders')];
   for (const i of State.interactions) {
     const s = State.scores[i.id];
     const agent = State.agents.find(a => a.id === i.agent_id);
     const customer = State.customers.find(c => c.id === i.customer_id);
     rows.push([i.id, fmtDate(i.created_at), agent?.name || '', customer?.name || '',
       i.channel, i.subject, s ? s.overall_score : '', s ? s.level : '',
-      s ? (s.critical_fail ? 'بله' : 'خیر') : '', s?.notes || '']);
+      s ? (s.critical_fail ? t('yesText') : t('noText')) : '', s?.notes || '']);
   }
   const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -741,7 +748,7 @@ function exportCsv() {
   const a = document.createElement('a');
   a.href = url; a.download = `interactions-${new Date().toISOString().slice(0,10)}.csv`;
   a.click(); URL.revokeObjectURL(url);
-  toast('فایل CSV دانلود شد');
+  toast(t('csvDownloadedToast'));
 }
 
 // ============ Auto-Score Modal ============
@@ -753,7 +760,7 @@ async function openAutoScore(id) {
   const agent = State.agents.find(a => a.id === interaction.agent_id);
 
   // First show a preview/measure
-  openModal('ارزیابی خودکار', `
+  openModal(t('autoScoreTitle'), `
     <div style="background:var(--surface-2);padding:12px;border-radius:8px;margin-bottom:14px">
       <b>${esc(interaction.subject)}</b>
       <div style="color:var(--text-muted);font-size:12px;margin-top:4px">${esc(interaction.transcript.slice(0, 300))}${interaction.transcript.length > 300 ? '…' : ''}</div>
@@ -773,7 +780,7 @@ async function openAutoScore(id) {
     const cf = res.critical_fail;
     const scoreColor = cf ? 'var(--danger)' : overall >= 85 ? 'var(--success)' : overall >= 60 ? 'var(--warning)' : 'var(--danger)';
 
-    openModal('ارزیابی خودکار', `
+    openModal(t('autoScoreTitle'), `
       <div style="background:var(--surface-2);padding:12px;border-radius:8px;margin-bottom:14px">
         <b>${esc(interaction.subject)}</b>
         <div style="color:var(--text-muted);font-size:12px;margin-top:4px">
@@ -784,7 +791,7 @@ async function openAutoScore(id) {
       <div style="text-align:center;padding:20px;background:var(--surface-2);border-radius:10px;margin-bottom:16px">
         <div style="font-size:48px;font-weight:800;color:${scoreColor}">${overall.toFixed(1)}</div>
         <div style="color:var(--text-muted);font-size:14px;margin-top:4px">${esc(level)}</div>
-        ${cf ? '<div class="pill pill-bad" style="margin-top:8px">شکست بحرانی</div>' : ''}
+        ${cf ? `<div class="pill pill-bad" style="margin-top:8px">${t('criticalFailLabel')}</div>` : ''}
       </div>
 
       <h3 style="margin:0 0 10px;font-size:14px">جزئیات اندازه‌گیری KPI</h3>
@@ -802,15 +809,15 @@ async function openAutoScore(id) {
       </div>
 
       <div class="field" style="margin-top:14px">
-        <label>یادداشت ارزیاب (اختیاری)</label>
-        <textarea id="autoScoreNotes" placeholder="نکات تکمیلی شما"></textarea>
+        <label>t('evaluatorNote')</label>
+        <textarea id="autoScoreNotes" placeholder="t('notesPlaceholder')"></textarea>
       </div>
-    `, `<button class="btn btn-primary" id="saveAutoScore">ذخیره در داشبورد</button>
-        <button class="btn" data-action="close-modal">انصراف</button>`);
+    `, `<button class="btn btn-primary" id="saveAutoScore">${t('saveToDashboardBtn')}</button>
+        <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
 
     $('#saveAutoScore').addEventListener('click', async () => {
       const btn = $('#saveAutoScore');
-      btn.disabled = true; btn.textContent = 'در حال ذخیره...';
+      btn.disabled = true; btn.textContent = t('savingText');
       try {
         const notes = $('#autoScoreNotes').value.trim();
         const saved = await api('/scoring/auto/' + id, {
@@ -822,15 +829,15 @@ async function openAutoScore(id) {
         closeModal();
         renderInteractions();
         renderTrendChart();
-        toast(`امتیاز ${saved.overall_score.toFixed(1)} (${saved.level}) ذخیره شد`);
+        toast(t('autoScoreResultSaved', saved.overall_score, saved.level));
       } catch (e) {
         toast(e.message, 'error');
-        btn.disabled = false; btn.textContent = 'ذخیره در داشبورد';
+        btn.disabled = false; btn.textContent = `${t('saveToDashboardBtn')}`;
       }
     });
   } catch (e) {
     closeModal();
-    if (e.message.includes('هیچ KPI فعالی')) {
+    if (e.message.includes(t('noActiveKpi'))) {
       toast('ابتدا KPI تعریف کنید یا پیش‌فرض‌ها را بارگذاری کنید', 'error');
       switchTab('rubrics');
     } else {
@@ -846,25 +853,25 @@ async function openView(id) {
   const agent = State.agents.find(a => a.id === i.agent_id);
   const customer = State.customers.find(c => c.id === i.customer_id);
   const s = State.scores[id];
-  openModal('جزئیات تعامل', `
-    <div class="field"><b>کارشناس:</b> ${esc(agent?.name || '-')} <span class="pill pill-info">${esc(agent?.department || '')}</span></div>
-    <div class="field"><b>مشتری:</b> ${esc(customer?.name || '-')} <span class="pill pill-muted">${esc(customer?.segment || '')}</span></div>
-    <div class="field"><b>کانال:</b> <span class="pill pill-muted">${esc(i.channel)}</span> &nbsp; <b>تاریخ:</b> ${fmtDate(i.created_at)}</div>
-    <div class="field"><b>موضوع:</b> ${esc(i.subject)}</div>
+  openModal(t('interactionDetailTitle'), `
+    <div class="field"><b>${t('colAgent')}:</b> ${esc(agent?.name || '-')} <span class="pill pill-info">${esc(agent?.department || '')}</span></div>
+    <div class="field"><b>${t('colCustomer')}:</b> ${esc(customer?.name || '-')} <span class="pill pill-muted">${esc(customer?.segment || '')}</span></div>
+    <div class="field"><b>${t('colChannel')}:</b> <span class="pill pill-muted">${esc(i.channel)}</span> &nbsp; <b>${t('colDate')}:</b> ${fmtDate(i.created_at)}</div>
+    <div class="field"><b>${t('colSubject')}:</b> ${esc(i.subject)}</div>
     <div class="field" style="background:var(--surface-2);padding:12px;border-radius:8px">
-      <b style="display:block;margin-bottom:6px">متن مکالمه:</b>
+      <b style="display:block;margin-bottom:6px">${t('transcriptLabel')}</b>
       <div style="white-space:pre-wrap">${esc(i.transcript)}</div>
     </div>
     ${s ? `
       <div style="margin-top:14px;padding:16px;background:var(--surface-2);border-radius:8px;text-align:center">
         <div style="font-size:36px;font-weight:800;color:${s.critical_fail ? 'var(--danger)' : 'var(--success)'}">${Number(s.overall_score).toFixed(1)}</div>
         <div style="color:var(--text-muted)">${esc(s.level)}</div>
-        ${s.critical_fail ? '<div class="pill pill-bad" style="margin-top:8px">شکست بحرانی</div>' : ''}
+        ${s.critical_fail ? `<div class="pill pill-bad" style="margin-top:8px">${t('criticalFailLabel2')}</div>` : ''}
         ${s.notes ? `<div style="margin-top:10px;text-align:right;color:var(--text-muted);font-size:12px">${esc(s.notes)}</div>` : ''}
-        ${s.evaluator ? `<div style="margin-top:6px;color:var(--text-muted);font-size:11px">ارزیاب: ${esc(s.evaluator)}</div>` : ''}
+        ${s.evaluator ? `<div style="margin-top:6px;color:var(--text-muted);font-size:11px">${t('evaluatorLabel')}: ${esc(s.evaluator)}</div>` : ''}
       </div>
     ` : ''}
-  `, `<button class="btn btn-primary" id="fromViewScore">${s ? 'بازبینی' : 'ارزیابی خودکار'}</button>
+  `, `<button class="btn btn-primary" id="fromViewScore">${s ? t('reviewBtn') : t('autoScoreBtn')}</button>
       <button class="btn" data-action="close-modal">بستن</button>`);
   $('#fromViewScore')?.addEventListener('click', () => { closeModal(); openAutoScore(id); });
 }
@@ -885,17 +892,17 @@ function renderRecommendations() {
         <div>
           <div class="rec-subject">${esc(r.subject)}</div>
           <div style="color:var(--text-muted);font-size:12px;margin-top:2px">
-            کارشناس: ${esc(r.agent_name || '-')} | مشتری: ${esc(r.customer_name || '-')} | کانال: ${esc(r.channel)}
+            ${t('expertCustomerChannel')(esc(r.agent_name || '-'), '', '')} | ${t('colCustomer')}: ${esc(r.customer_name || '-')} | ${t('colChannel')}: ${esc(r.channel)}
           </div>
         </div>
         <div style="text-align:center">
           <div class="risk-score" style="color:${color}">${r.risk_score.toFixed(0)}</div>
-          <div style="font-size:10px;color:var(--text-muted)">ریسک</div>
+          <div style="font-size:10px;color:var(--text-muted)">${t('riskLabel')}</div>
           ${priorityPill(r.priority)}
         </div>
       </div>
       <div class="rec-body">
-        <div style="margin-bottom:8px"><b>دلایل ریسک:</b></div>
+        <div style="margin-bottom:8px"><b>${t('riskFactorsLabel')}</b></div>
         <ul class="factors">
           ${reasons.map(f => {
             if (typeof f === 'string') {
@@ -914,10 +921,10 @@ function renderRecommendations() {
           }).join('')}
         </ul>
         <div style="margin-top:8px;padding:8px;background:var(--surface-2);border-radius:6px">
-          <b>اقدام پیشنهادی:</b> ${esc(r.suggested_action)}
+          <b>${t('suggestedActionLabel')}</b> ${esc(r.suggested_action)}
         </div>
         <div style="margin-top:10px">
-          <button class="btn btn-sm btn-primary" data-rec-auto="${r.interaction_id}">ارزیابی خودکار</button>
+          <button class="btn btn-sm btn-primary" data-rec-auto="${r.interaction_id}">${t('autoScoreBtn2')}</button>
         </div>
       </div>
     </div>`;
@@ -934,16 +941,16 @@ function renderAgents() {
   if (!tbody) return;
   tbody.innerHTML = State.agents.map(a => `
     <tr>
-      <td data-label="نام"><b>${esc(a.name)}</b></td>
-      <td data-label="واحد"><span class="pill pill-info">${esc(a.department)}</span></td>
-      <td data-label="سمت">${esc(a.position)}</td>
+      <td data-label='${t("colName")}'><b>${esc(a.name)}</b></td>
+      <td data-label='${t("colDepartment")}'><span class="pill pill-info">${esc(a.department)}</span></td>
+      <td data-label='${t("colPosition")}'>${esc(a.position)}</td>
       <td>${a.active ? '<span class="pill pill-good">فعال</span>' : '<span class="pill pill-muted">غیرفعال</span>'}</td>
-      <td class="row-actions" data-label="عملیات">
-        <button class="btn btn-sm" data-toggle-agent="${a.id}" data-active="${!a.active}">${a.active ? 'غیرفعال' : 'فعال'}</button>
-        <button class="btn btn-sm btn-primary" data-agent-report="${a.id}">گزارش</button>
+      <td class="row-actions" data-label='${t("colActions")}'>
+        <button class="btn btn-sm" data-toggle-agent="${a.id}" data-active="${!a.active}">${a.active ? t('isInactiveAgent') : t('isActiveAgent')}</button>
+        <button class="btn btn-sm btn-primary" data-agent-report="${a.id}">${t('reportBtn2')}</button>
       </td>
     </tr>
-  `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">کارشناسی یافت نشد</td></tr>`;
+  `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">${t('emptyAgentMsg')}</td></tr>`;
   tbody.querySelectorAll('[data-toggle-agent]').forEach(b => b.addEventListener('click', () => toggleAgent(b.dataset.toggleAgent, b.dataset.active === 'true')));
   tbody.querySelectorAll('[data-agent-report]').forEach(b => b.addEventListener('click', () => { switchTab('report'); setTimeout(() => { $('#reportAgent').value = b.dataset.agentReport; renderReport(); }, 50); }));
   renderPagination('#agentsPager', State.agentsTotal || 0, State.page.agents, State.agentsTotalPages || 1, (p) => { State.page.agents = p; loadAgents(true); });
@@ -954,17 +961,17 @@ async function toggleAgent(id, active) {
     await api('/agents/' + id, { method: 'PATCH', body: JSON.stringify({ active }) });
     State.agents = await api('/agents'); cacheSet('agents', State.agents);
     renderAgents();
-    toast(active ? 'فعال شد' : 'غیرفعال شد');
+    toast(t('toggleToast')(active));
   } catch (e) { toast(e.message, 'error'); }
 }
 
 function openNewAgent() {
-  openModal('ثبت کارشناس', `
-    <div class="field"><label>نام و نام خانوادگی</label><input id="aName" placeholder="مثال: علی رضایی"></div>
-    <div class="field"><label>واحد</label><select id="aDept"><option>بانک</option><option>بیمه</option><option>عمومی</option></select></div>
-    <div class="field"><label>سمت</label><input id="aPos" placeholder="مثال: کارشناس ارشد"></div>
-  `, `<button class="btn btn-primary" id="saveAgent">ذخیره</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+  openModal(t('newAgentTitle'), `
+    <div class="field"><label>${t('agentNameLabel')}</label><input id="aName" placeholder="مثال: علی رضایی"></div>
+    <div class="field"><label>${t('agentDeptLabel')}</label><select id="aDept"><option>بانک</option><option>بیمه</option><option>عمومی</option></select></div>
+    <div class="field"><label>${t('agentPosLabel')}</label><input id="aPos" placeholder='${t("agentPosPlaceholder")}'></div>
+  `, `<button class="btn btn-primary" id="saveAgent">${t('saveBtn')}</button>
+      <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
   $('#saveAgent').addEventListener('click', async () => {
     try {
       await api('/agents', { method: 'POST', body: JSON.stringify({
@@ -972,7 +979,7 @@ function openNewAgent() {
       })});
       State.loaded.agents = false;
       closeModal(); await loadAgents();
-      toast('کارشناس ثبت شد');
+      toast(t('agentSavedToast'));
     } catch (e) { toast(e.message, 'error'); }
   });
 }
@@ -987,16 +994,16 @@ function renderCustomers() {
       <td>${esc(c.phone)}</td>
       <td><span class="pill pill-info">${esc(c.product_type)}</span></td>
       <td>${esc(c.segment)}</td>
-      <td class="row-actions" data-label="عملیات">
-        <button class="btn btn-sm" data-edit-customer="${c.id}">ویرایش</button>
-        <button class="btn btn-sm" data-del-customer="${c.id}">حذف</button>
+      <td class="row-actions" data-label='${t("colActions")}'>
+        <button class="btn btn-sm" data-edit-customer="${c.id}">${t('editBtn')}</button>
+        <button class="btn btn-sm" data-del-customer="${c.id}">${t('deleteBtn')}</button>
       </td>
     </tr>
-  `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">مشتری یافت نشد</td></tr>`;
+  `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">${t('emptyCustomerMsg')}</td></tr>`;
   tbody.querySelectorAll('[data-edit-customer]').forEach(b => b.addEventListener('click', () => openEditCustomer(b.dataset.editCustomer)));
   tbody.querySelectorAll('[data-del-customer]').forEach(b => b.addEventListener('click', async () => {
-    if (!confirm('حذف شود؟')) return;
-    try { await api('/customers/' + b.dataset.delCustomer, { method: 'DELETE' }); State.loaded.customers = false; await loadCustomers(); toast('حذف شد'); }
+    if (!confirm(t('confirmDelete', c.name))) return;
+    try { await api('/customers/' + b.dataset.delCustomer, { method: 'DELETE' }); State.loaded.customers = false; await loadCustomers(); toast(t('customerDeletedToast')); }
     catch (e) { toast(e.message, 'error'); }
   }));
   renderPagination('#customersPager', State.customersTotal || 0, State.page.customers, State.customersTotalPages || 1, (p) => { State.page.customers = p; loadCustomers(true); });
@@ -1005,27 +1012,27 @@ function renderCustomers() {
 function openEditCustomer(id) {
   const c = State.customers.find(x => x.id === id);
   if (!c) return;
-  openModal(`ویرایش مشتری: ${c.name}`, `
-    <div class="field"><label>نام</label><input id="cName" value="${esc(c.name)}"></div>
-    <div class="field"><label>تلفن</label><input id="cPhone" value="${esc(c.phone)}"></div>
-    <div class="field"><label>نوع محصول</label>
+  openModal(t('editCustomerTitle')(c.name), `
+    <div class="field"><label>${t('colName')}</label><input id="cName" value="${esc(c.name)}"></div>
+    <div class="field"><label>${t('colPhone')}</label><input id="cPhone" value="${esc(c.phone)}"></div>
+    <div class="field"><label>${t('colProduct')}</label>
       <select id="cProduct">
-        <option ${c.product_type==='بانک'?'selected':''}>بانک</option>
-        <option ${c.product_type==='بیمه'?'selected':''}>بیمه</option>
-        <option ${c.product_type==='سرمایه‌گذاری'?'selected':''}>سرمایه‌گذاری</option>
-        <option ${c.product_type==='وام'?'selected':''}>وام</option>
+        <option ${c.product_type===t('productBank')?'selected':''}>${t('productBank')}</option>
+        <option ${c.product_type===t('productInsurance')?'selected':''}>${t('productInsurance')}</option>
+        <option ${c.product_type===t('productInvestment')?'selected':''}>${t('productInvestment')}</option>
+        <option ${c.product_type===t('productLoan')?'selected':''}>${t('productLoan')}</option>
       </select>
     </div>
-    <div class="field"><label>سطح</label>
+    <div class="field"><label>${t('segmentLabel')}</label>
       <select id="cSegment">
-        <option ${c.segment==='عادی'?'selected':''}>عادی</option>
-        <option ${c.segment==='مهم'?'selected':''}>مهم</option>
-        <option ${c.segment==='VIP'?'selected':''}>VIP</option>
+        <option ${c.segment===t('segmentNormal')?'selected':''}>${t('segmentNormal')}</option>
+        <option ${c.segment===t('segmentImportant')?'selected':''}>${t('segmentImportant')}</option>
+        <option ${c.segment==='VIP'?'selected':''}>${t('vipOpt')}</option>
       </select>
     </div>
-    <div class="field"><label>یادداشت</label><textarea id="cNotes" rows="2">${esc(c.notes || '')}</textarea></div>
-  `, `<button class="btn btn-primary" id="saveEditCust">ذخیره</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+    <div class="field"><label>${t('notesFieldLabel')}</label><textarea id="cNotes" rows="2">${esc(c.notes || '')}</textarea></div>
+  `, `<button class="btn btn-primary" id="saveEditCust">${t('saveBtn')}</button>
+      <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
   $('#saveEditCust').addEventListener('click', async () => {
     try {
       await api('/customers/' + encodeURIComponent(id), {
@@ -1046,14 +1053,14 @@ function openEditCustomer(id) {
 }
 
 function openNewCustomer() {
-  openModal('ثبت مشتری', `
-    <div class="field"><label>نام</label><input id="cName"></div>
-    <div class="field"><label>تلفن</label><input id="cPhone"></div>
-    <div class="field"><label>محصول</label><input id="cProduct" placeholder="مثال: تسهیلات"></div>
-    <div class="field"><label>بخش</label><select id="cSeg"><option>عادی</option><option>VIP</option><option>شرکتی</option></select></div>
-    <div class="field"><label>یادداشت</label><textarea id="cNotes"></textarea></div>
-  `, `<button class="btn btn-primary" id="saveCustomer">ذخیره</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+  openModal(t('newCustomerTitle'), `
+    <div class="field"><label>${t('newCustomerName')}</label><input id="cName"></div>
+    <div class="field"><label>${t('newCustomerPhone')}</label><input id="cPhone"></div>
+    <div class="field"><label>${t('newCustomerProduct')}</label><input id="cProduct" placeholder="مثال: تسهیلات"></div>
+    <div class="field"><label>${t('newCustomerSeg')}</label><select id="cSeg"><option>${t('normalOpt')}</option><option>${t('vipOpt')}</option><option>${t('corpOpt')}</option></select></div>
+    <div class="field"><label>${t('notesFieldLabel')}</label><textarea id="cNotes"></textarea></div>
+  `, `<button class="btn btn-primary" id="saveCustomer">${t('saveBtn')}</button>
+      <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
   $('#saveCustomer').addEventListener('click', async () => {
     try {
       await api('/customers', { method: 'POST', body: JSON.stringify({
@@ -1062,7 +1069,7 @@ function openNewCustomer() {
         notes: $('#cNotes').value.trim()
       })});
       State.loaded.customers = false;
-      closeModal(); await loadCustomers(); toast('مشتری ثبت شد');
+      closeModal(); await loadCustomers(); toast(t('customerSavedToast'));
     } catch (e) { toast(e.message, 'error'); }
   });
 }
@@ -1078,14 +1085,14 @@ function openNewInteraction() {
     <div class="field"><label>مشتری</label><select id="iCust">${State.customers.map(c => `<option value="${c.id}">${esc(c.name)} — ${esc(c.product_type)}</option>`).join('')}</select></div>
     <div class="field"><label>کانال</label><select id="iCh"><option>تلفن</option><option>حضوری</option><option>ایمیل</option><option>چت</option><option>پیامک</option></select></div>
     <div class="field"><label>موضوع</label><input id="iSub"></div>
-    <div class="field"><label>متن مکالمه</label><textarea id="iTr" style="min-height:120px" placeholder="مثال: سلام. مشتری با عصبانیت شکایت کرد که ..."></textarea></div>
+    <div class="field"><label>متن مکالمه</label><textarea id="iTr" style="min-height:120px" placeholder='${t("transcriptPlaceholder")}'></textarea></div>
   `, `<button class="btn btn-primary" id="saveInteraction">ثبت</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+      <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
   $('#saveInteraction').addEventListener('click', async () => {
     try {
       const sub = $('#iSub').value.trim();
       const tr = $('#iTr').value.trim();
-      if (!sub || !tr) throw new Error('موضوع و متن الزامی است');
+      if (!sub || !tr) throw new Error(t('requiredSubjectTranscriptError'));
       await api('/interactions', { method: 'POST', body: JSON.stringify({
         agent_id: $('#iAgent').value, customer_id: $('#iCust').value,
         channel: $('#iCh').value, subject: sub, transcript: tr, tags: []
@@ -1106,8 +1113,8 @@ function renderKpis() {
   if (!State.kpis.length) {
     list.innerHTML = `<div class="card" style="text-align:center;padding:40px;color:var(--text-muted)">
       <div style="font-size:48px;margin-bottom:12px">📊</div>
-      <div style="margin-bottom:16px">هیچ KPI تعریف نشده است</div>
-      <button class="btn btn-primary" id="emptySeedKpis">بارگذاری ۷ KPI پیشفرض فارسی</button>
+      <div style="margin-bottom:16px">${t('noKpiDefined')}</div>
+      <button class="btn btn-primary" id="emptySeedKpis">${t('seedDefaultKpisBtn')}</button>
     </div>`;
     $('#emptySeedKpis')?.addEventListener('click', seedKpis);
     return;
@@ -1136,8 +1143,8 @@ function renderKpis() {
       ${k.pattern ? `<div style="font-size:11px;color:var(--text-muted);margin:4px 0"><b>الگو:</b> <code>${esc(k.pattern)}</code></div>` : ''}
       ${k.threshold != null ? `<div style="font-size:11px;color:var(--text-muted);margin:4px 0"><b>آستانه:</b> ${esc(k.threshold)}</div>` : ''}
       <div class="kpi-card-actions">
-        <button class="btn btn-sm" data-toggle-kpi="${k.id}" data-active="${!k.active}">${k.active ? 'غیرفعال' : 'فعال'}</button>
-        <button class="btn btn-sm" data-del-kpi="${k.id}">حذف</button>
+        <button class="btn btn-sm" data-toggle-kpi="${k.id}" data-active="${!k.active}">${k.active ? t('isInactiveAgent') : t('isActiveAgent')}</button>
+        <button class="btn btn-sm" data-del-kpi="${k.id}">${t('deleteCustLabel')}</button>
       </div>
     </div>
   `).join('');
@@ -1146,7 +1153,7 @@ function renderKpis() {
       const active = b.dataset.active === 'true';
       await api('/kpis/' + b.dataset.toggleKpi, { method: 'PATCH', body: JSON.stringify({ active }) });
       State.kpis = await api('/kpis'); renderKpis();
-      toast(active ? 'فعال شد' : 'غیرفعال شد');
+      toast(t('toggleToast')(active));
     } catch (e) { toast(e.message, 'error'); }
   }));
   list.querySelectorAll('[data-del-kpi]').forEach(b => b.addEventListener('click', async () => {
@@ -1164,7 +1171,7 @@ async function seedKpis() {
     const result = await api('/kpis/seed', { method: 'POST' });
     State.kpis = await api('/kpis');
     renderKpis();
-    toast(`${result.length} KPI بارگذاری شد`);
+    toast(t('kpisLoadedToast', result.length));
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -1193,9 +1200,9 @@ function openNewKpi() {
       <input id="kThreshold" type="number" step="0.1" placeholder="مثل: 2.0 برای 'حداقل ۲ بار'">
     </div>
     <div class="field"><label>وزن (۰-۱۰۰)</label><input id="kWeight" type="number" min="0" max="100" step="1" value="10"></div>
-    <div class="field"><label><input type="checkbox" id="kCritical"> شکست بحرانی (اگر نمره کمتر از ۶۰ باشد، کل interaction شکست می‌خورد)</label></div>
+    <label><input type="checkbox" id="kCritical"> ${t('criticalFailNote')}</label>
   `, `<button class="btn btn-primary" id="saveKpi">ذخیره KPI</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+      <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
   $('#saveKpi').addEventListener('click', async () => {
     const code = $('#kCode').value.trim();
     const name = $('#kName').value.trim();
@@ -1238,8 +1245,8 @@ function renderIssues() {
       <td style="max-width:360px">${esc(x.description)}${x.root_cause ? `<div style="color:var(--text-muted);font-size:12px;margin-top:4px"><b>علت:</b> ${esc(x.root_cause)}</div>` : ''}</td>
       <td>${statusPill(x.status)}</td>
       <td>${x.due_at ? fmtDate(x.due_at) : '-'}</td>
-      <td class="row-actions" data-label="عملیات">
-        ${x.status === 'باز' ? `<button class="btn btn-sm btn-success" data-resolve-issue="${x.id}">CAPA</button>` : '<span style="color:var(--text-muted);font-size:12px">بسته شد</span>'}
+      <td class="row-actions" data-label='${t("colActions")}'>
+        ${x.status === t('isOpenStatus') ? `<button class="btn btn-sm btn-success" data-resolve-issue="${x.id}">CAPA</button>` : '<span style="color:var(--text-muted);font-size:12px">' + t('isClosedStatus') + '</span>'}
       </td>
     </tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">ایرادی یافت نشد</td></tr>`;
@@ -1256,7 +1263,7 @@ function openResolve(id) {
     <div class="field"><label>علت ریشه‌ای</label><textarea id="capRoot" placeholder="چرا این اتفاق افتاد؟"></textarea></div>
     <div class="field"><label>اقدام اصلاحی</label><textarea id="capAct" placeholder="چه اقدامی انجام می‌شود؟"></textarea></div>
   `, `<button class="btn btn-success" id="saveCapa">بستن و ثبت</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+      <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
   $('#saveCapa').addEventListener('click', async () => {
     try {
       const root = $('#capRoot').value.trim();
@@ -1274,7 +1281,7 @@ function openResolve(id) {
 function populateReportAgents() {
   const sel = $('#reportAgent');
   if (!sel) return;
-  sel.innerHTML = '<option value="">انتخاب کارشناس...</option>' + State.agents.map(a => `<option value="${a.id}">${esc(a.name)} — ${esc(a.department)}</option>`).join('');
+  sel.innerHTML = '<option value="">' + t('reportSelectPlaceholder') + '</option>' + State.agents.map(a => `<option value="${a.id}">${esc(a.name)} — ${esc(a.department)}</option>`).join('');
   if (!sel.dataset.bound) {
     sel.addEventListener('change', renderReport);
     sel.dataset.bound = '1';
@@ -1291,7 +1298,7 @@ async function renderReport() {
   try {
     const r = await api('/reports/agent/' + id);
     const kpis = [
-      { label: 'میانگین امتیاز', value: Number(r.average_score || 0).toFixed(1), cls: 'success' },
+      { label: t('kpiAvgScoreText'), value: Number(r.average_score || 0).toFixed(1), cls: 'success' },
       { label: 'تعداد ارزیابی', value: r.scored_interactions, cls: 'primary' },
       { label: 'شکست بحرانی', value: r.critical_failures, cls: r.critical_failures > 0 ? 'danger' : 'success' },
     ];
@@ -1356,9 +1363,9 @@ function renderUsers() {
       <td><b>${esc(u.username)}</b></td>
       <td>${u.is_admin ? '<span class="pill pill-info">مدیر سیستم</span>' : '<span class="pill pill-muted">کاربر عادی</span>'}</td>
       <td>${fmtDate(u.created_at)}</td>
-      <td class="row-actions" data-label="عملیات">
+      <td class="row-actions" data-label='${t("colActions")}'>
         <button class="btn btn-sm" data-edit-user="${u.username}">تغییر رمز / نقش</button>
-        <button class="btn btn-sm" data-del-user="${u.username}">حذف</button>
+        <button class="btn btn-sm" data-del-user="${u.username}">${t('deleteCustLabel')}</button>
       </td>
     </tr>
   `).join('') || `<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">کاربری یافت نشد</td></tr>`;
@@ -1383,7 +1390,7 @@ function openNewUser() {
     <div class="field"><label>رمز عبور (حداقل ۴ کاراکتر)</label><input id="uPass" type="password" autocomplete="new-password"></div>
     <div class="field"><label><input type="checkbox" id="uAdmin"> دسترسی مدیر سیستم</label></div>
   `, `<button class="btn btn-primary" id="saveUser">ایجاد</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+      <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
   $('#saveUser').addEventListener('click', async () => {
     try {
       const username = $('#uName').value.trim();
@@ -1405,8 +1412,8 @@ function openEditUser(username) {
     <div class="field"><label>نام کاربری</label><input value="${esc(username)}" disabled></div>
     <div class="field"><label>رمز عبور جدید (خالی = بدون تغییر)</label><input id="uPassNew" type="password" autocomplete="new-password"></div>
     <div class="field"><label><input type="checkbox" id="uAdmin" ${u.is_admin ? 'checked' : ''}> دسترسی مدیر سیستم</label></div>
-  `, `<button class="btn btn-primary" id="updateUser">ذخیره</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+  `, `<button class="btn btn-primary" id="updateUser">${t('saveBtn')}</button>
+      <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
   $('#updateUser').addEventListener('click', async () => {
     try {
       const newPass = $('#uPassNew').value;
@@ -1506,9 +1513,9 @@ setInterval(checkConnection, 10000);
 
 // ===================== Coaching Plans (Closed-Loop QA) =====================
 const COACHING_STATUS_LABEL = {
-  'draft': 'پیشنویس', 'pending_acknowledgement': 'در انتظار تایید',
-  'acknowledged': 'تایید شده', 'in_progress': 'در حال اجرا', 'verified': 'تاییدشده با پیگیری',
-  'closed': 'بسته شده', 'escalated': 'معوق / ارجاع'
+  'draft': t('coachStatusMap')['draft'], 'pending_acknowledgement': t('coachStatusMap')['pending_acknowledgement'],
+  'acknowledged': t('coachStatusMap')['acknowledged'], 'in_progress': t('coachStatusMap')['in_progress'], 'verified': t('coachStatusMap')['verified'],
+  'closed': t('coachStatusMap')['closed'], 'escalated': t('coachStatusMap')['escalated']
 };
 const COACHING_STATUS_PILL = {
   'draft': 'pill-muted', 'pending_acknowledgement': 'pill-warn',
@@ -1531,7 +1538,7 @@ async function loadCoaching(force = false) {
   try {
     const params = new URLSearchParams({ offset: (coachingPage - 1) * coachingPageSize, limit: coachingPageSize });
     if (status) params.set('status', status);
-    const data = await withLoading('در حال بارگذاری برنامههای آموزشی...', () => api('/coaching/plans?' + params));
+    const data = await withLoading(t('coachLoadLabel'), () => api('/coaching/plans?' + params));
     State.coachingPlans = data.items || [];
     State.coachingTotal = data.total || State.coachingPlans.length;
     State.coachingTotalPages = Math.max(1, Math.ceil((data.total || 0) / coachingPageSize));
@@ -1539,7 +1546,7 @@ async function loadCoaching(force = false) {
     setupCoachingEvents();
     renderCoaching();
   } catch (e) {
-    toast('خطا در بارگذاری برنامههای آموزشی: ' + e.message, 'error');
+    toast(t('coachLoadedToast') + e.message, 'error');
   }
 }
 
@@ -1577,23 +1584,23 @@ async function openNewCoachingPlan() {
   openModal('برنامه آموزشی جدید', `
     <div class="field"><label>کارشناس</label><select id="cpAgent">${agentOpts}</select></div>
     <div class="field"><label>تعامل مرتبط</label><select id="cpInteraction">${intOpts}</select></div>
-    <div class="field"><label>موضوع آموزشی (Theme)</label><input id="cpTheme" placeholder="مثلاً احوالپرسی آغازین"></div>
-    <div class="field"><label>شکاف رفتاری</label><input id="cpGap" placeholder="مثلاً عدم احوالپرسی با مشتری"></div>
+    <div class="field"><label>موضوع آموزشی (Theme)</label><input id="cpTheme" placeholder='${t("coachingThemePlaceholder")}'></div>
+    <div class="field"><label>شکاف رفتاری</label><input id="cpGap" placeholder='${t("behaviorGapPlaceholder")}'></div>
     <div class="field"><label>شواهد</label><textarea id="cpEvidence" placeholder="مثلاً مکالمه 1460 — فقدان احوالپرسی"></textarea></div>
     <div class="field"><label>علت ریشه</label><input id="cpRoot" placeholder="مثلاً عجله در پاسخ"></div>
-    <div class="field"><label>اثر بر مشتری</label><input id="cpImpact" placeholder="مثلاً کاهش رضایت"></div>
+    <div class="field"><label>اثر بر مشتری</label><input id="cpImpact" placeholder='${t("customerImpactPlaceholder")}'></div>
     <div class="field"><label>فعالیت عملی</label><input id="cpActivity" placeholder="مثلاً نقشبازی (roleplay)"></div>
     <div class="field"><label>سنجه موفقیت</label><input id="cpMetric" placeholder="مثلاً avg_score"></div>
     <div class="field"><label>تعداد پیگیریها</label><input id="cpFollowups" type="number" min="1" value="2"></div>
     <div class="field"><label>مهلت پیگیری</label><input id="cpDue" type="datetime-local"></div>
   `, `<button class="btn btn-success" id="saveCoachingPlan">ایجاد برنامه</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+      <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
 
   $('#saveCoachingPlan').addEventListener('click', async () => {
     try {
       const agentId = $('#cpAgent').value;
       const interactionId = $('#cpInteraction').value;
-      if (!agentId) throw new Error('کارشناس الزامی است');
+      if (!agentId) throw new Error(t('requiredAgentError'));
       if (!interactionId) throw new Error('تعامل الزامی است');
       const due = $('#cpDue').value;
       if (!due) throw new Error('مهلت الزامی است');
@@ -1610,7 +1617,7 @@ async function openNewCoachingPlan() {
         follow_up_due_at: new Date(due).toISOString(),
         follow_up_review_count: parseInt($('#cpFollowups').value, 10) || 2
       };
-      await withLoading('در حال ایجاد برنامه...', () => api('/coaching/plans', { method: 'POST', body: JSON.stringify(body) }));
+      await withLoading(t('createCoachLabel'), () => api('/coaching/plans', { method: 'POST', body: JSON.stringify(body) }));
       closeModal();
       State.loaded.coaching = false;
       await loadCoaching(true);
@@ -1639,7 +1646,7 @@ function renderCoaching() {
       <td title="${esc(p.customer_impact)}">${esc(p.customer_impact || '-')}</td>
       <td>${esc(p.success_metric || '-')}</td>
       <td>${fmtDate(p.follow_up_due_at)}</td>
-      <td class="row-actions" data-label="عملیات">${renderCoachingActions(p)}</td>
+      <td class="row-actions" data-label='${t("colActions")}'>${renderCoachingActions(p)}</td>
     </tr>`;
   }).join('');
 
@@ -1721,7 +1728,7 @@ async function handleCoachingAction(action, planId) {
 }
 
 async function openCoachingReview(planId) {
-  showLoading('در حال بارگذاری...');
+  showLoading(t('loadingAllLabel'));
   try {
     const data = await api('/coaching/plans/' + planId);
     hideLoading();
@@ -1753,8 +1760,8 @@ async function openCoachingReview(planId) {
 
 // ===================== Calibration Sessions (Blind Scoring) =====================
 const CAL_STATUS_LABEL = {
-  'draft': 'پیشنویس', 'scoring': 'در حال امتیازدهی', 'in_session': 'در جلسه',
-  'completed': 'تکمیل شده', 'cancelled': 'لغو شده'
+  'draft': t('calStatusMap')['draft'], 'scoring': t('calStatusMap')['scoring'], 'in_session': t('calStatusMap')['in_session'],
+  'completed': t('calStatusMap')['completed'], 'cancelled': t('calStatusMap')['cancelled']
 };
 const CAL_STATUS_PILL = {
   'draft': 'pill-muted', 'scoring': 'pill-warn', 'in_session': 'pill-info',
@@ -1770,7 +1777,7 @@ async function loadCalibration(force = false) {
   try {
     const params = new URLSearchParams({ offset: (calPage - 1) * calPageSize, limit: calPageSize });
     if (status) params.set('status', status);
-    const data = await withLoading('در حال بارگذاری کالیبراسیون...', () => api('/calibration/sessions?' + params));
+    const data = await withLoading(t('calLoadLabel'), () => api('/calibration/sessions?' + params));
     State.calibrationSessions = data.items || [];
     State.calibrationTotal = data.total || State.calibrationSessions.length;
     State.calibrationTotalPages = Math.max(1, Math.ceil((data.total || 0) / calPageSize));
@@ -1778,7 +1785,7 @@ async function loadCalibration(force = false) {
     attachCalibrationEventListeners();
     renderCalibration();
   } catch (e) {
-    toast('خطا در بارگذاری کالیبراسیون: ' + e.message, 'error');
+    toast(t('calLoadedToast') + e.message, 'error');
   }
 }
 
@@ -1808,13 +1815,13 @@ function renderCalibration() {
     const pill = CAL_STATUS_PILL[s.status] || 'pill-muted';
     const rate = s.agreement_rate != null ? (s.agreement_rate * 100).toFixed(1) + '%' : '—';
     return `<tr>
-      <td data-label="وضعیت"><span class="pill ${pill}">${esc(CAL_STATUS_LABEL[s.status] || s.status)}</span></td>
-      <td data-label="نام جلسه">${esc(s.name)}</td>
-      <td data-label="استاندارد">${esc(s.rubric_id || '-')}</td>
+      <td data-label='${t("statusCol")}'><span class="pill ${pill}">${esc(CAL_STATUS_LABEL[s.status] || s.status)}</span></td>
+      <td data-label='${t("colSessionName")}'>${esc(s.name)}</td>
+      <td data-label='${t("colStandard")}'>${esc(s.rubric_id || '-')}</td>
       <td data-label="نمونه‌ها">${(s.sample_interaction_ids || []).length}</td>
-      <td data-label="توافق"><b>${rate}</b></td>
-      <td data-label="مهلت">${fmtDate(s.deadline_at)}</td>
-      <td class="row-actions" data-label="عملیات">${renderCalibrationActions(s)}</td>
+      <td data-label='${t("colAgreement")}'><b>${rate}</b></td>
+      <td data-label='${t("colDeadline")}'>${fmtDate(s.deadline_at)}</td>
+      <td class="row-actions" data-label='${t("colActions")}'>${renderCalibrationActions(s)}</td>
     </tr>`;
   }).join('');
 
@@ -1905,7 +1912,7 @@ async function openNewCalibration() {
     <div class="field"><label>تعاملات نمونه (Ctrl+Click)</label>
       <select id="calSamples" multiple size="4">${interactionOptions || '<option value="">— تعاملی نیست —</option>'}</select></div>
   `, `<button class="btn btn-success" id="saveCal">ایجاد جلسه</button>
-      <button class="btn" data-action="close-modal">انصراف</button>`);
+      <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
 
   $('#saveCal').addEventListener('click', async () => {
     try {
@@ -1924,7 +1931,7 @@ async function openNewCalibration() {
         min_reviewers_per_interaction: 2,
         deadline_at: new Date(dt).toISOString()
       };
-      await withLoading('در حال ایجاد جلسه...', () => api('/calibration/sessions', { method: 'POST', body: JSON.stringify(body) }));
+      await withLoading(t('createCalLabel'), () => api('/calibration/sessions', { method: 'POST', body: JSON.stringify(body) }));
       closeModal();
       State.loaded.calibration = false;
       await loadCalibration(true);
@@ -1934,7 +1941,7 @@ async function openNewCalibration() {
 }
 
 async function openCalibrationScoring(sessionId) {
-  showLoading('در حال بارگذاری جلسه...');
+  showLoading(t('calSessionLoadLabel'));
   try {
     const s = await api('/calibration/sessions/' + sessionId);
     hideLoading();
@@ -1950,7 +1957,7 @@ async function openCalibrationScoring(sessionId) {
       <p style="color:var(--text-muted);margin-bottom:12px">امتیاز هر تعامل را ۰ تا ۱۰۰ بگذارید. امتیازها بهصورت کور (blind) ثبت میشوند.</p>
       <table class="data-table"><thead><tr><th>تعامل</th><th>امتیاز کلی</th><th>یادداشت</th></tr></thead><tbody>${sampleRows}</tbody></table>
     `, `<button class="btn btn-success" id="saveCalScore">ثبت امتیازها</button>
-        <button class="btn" data-action="close-modal">انصراف</button>`);
+        <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
     $('#saveCalScore').addEventListener('click', async () => {
       try {
         const scores = samples.map(it => {
@@ -1963,7 +1970,7 @@ async function openCalibrationScoring(sessionId) {
             notes: document.querySelector(`.calNotes[data-interaction="${it}"]`).value || null
           };
         });
-        await withLoading('در حال ثبت امتیازها...', async () => {
+        await withLoading(t('submitScoresLabel'), async () => {
           for (const sc of scores) {
             await api('/calibration/sessions/' + sessionId + '/score', { method: 'POST', body: JSON.stringify(sc) });
           }

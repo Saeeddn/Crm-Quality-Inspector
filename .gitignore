@@ -40,3 +40,12 @@ package-lock.json
 *.key
 *.crt
 secrets.yaml
+
+*.log
+.herries/
+docs/superpowers/
+PLAN.md
+QA_REPORT.md
+README.md
+static/BUGFIX_REPORT.md
+.hermes/
