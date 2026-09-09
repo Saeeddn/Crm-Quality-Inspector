@@ -1,48 +1,34 @@
-# docker-compose.yml — local dev / single-server deploy
+# docker-compose.yml — production deployment on Ollama server
+# Connects to the NATIVE PostgreSQL on the host (not a container).
+# Logs persist on a host volume at /var/log/crm-qi/.
+#
 # Usage:
-#   cp .env.example .env  &&  edit ADMIN_PASSWORD and DATABASE_URL
+#   cp .env .env  (edit DATABASE_URL and ADMIN_PASSWORD)
 #   docker compose up -d --build
-#   open http://localhost:3000
+#   open http://<server-ip>:3000
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-crm_quality}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must be set in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-crm_quality_inspector}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
   app:
     build: .
     image: crm-quality-inspector:latest
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
+    # Use host network so the container can reach native PostgreSQL on 127.0.0.1
+    network_mode: host
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-crm_quality}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-crm_quality_inspector}
+      # Connect to the NATIVE postgres on the host, NOT a container
+      DATABASE_URL: ${DATABASE_URL}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?must be set in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       RUST_LOG: info,crm_qi=info,sqlx=warn
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 3000
-    ports:
-      - "3000:3000"
+      LOG_FILE: /var/log/crm-qi/crm-quality-inspector.log
+    volumes:
+      # Bind mount for log persistence — survives container rebuilds
+      - /root/crm-qi-logs:/var/log/crm-qi
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
-
-volumes:
-  pgdata:
-    name: crm_qi_pgdata
