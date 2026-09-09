@@ -17,10 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and export image
+      - name: Build Docker image
         run: |
           docker build -t crm-quality-inspector:deploy .
           docker save crm-quality-inspector:deploy | gzip > /tmp/crm-qi-image.tar.gz
@@ -28,13 +25,16 @@ jobs:
 
       - name: Copy image to server
         run: |
-          scp /tmp/crm-qi-image.tar.gz ${SERVER_USER}@${SERVER_HOST}:/tmp/
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          scp -i "${{ secrets.DEPLOY_SSH_KEY }}" \
+            -o StrictHostKeyChecking=no \
+            /tmp/crm-qi-image.tar.gz \
+            ${SERVER_USER}@${SERVER_HOST}:/tmp/
 
       - name: Deploy on server
         run: |
-          ssh ${SERVER_USER}@${SERVER_HOST} << 'EOF'
+          ssh -i "${{ secrets.DEPLOY_SSH_KEY }}" \
+            -o StrictHostKeyChecking=no \
+            ${SERVER_USER}@${SERVER_HOST} << 'EOF'
             set -e
             cd $PROJECT_DIR
 
@@ -42,21 +42,15 @@ jobs:
             docker load < /tmp/crm-qi-image.tar.gz
             rm /tmp/crm-qi-image.tar.gz
 
-            # Ensure .env exists
-            if [ ! -f .env ]; then
-              cp .env.example .env
-            fi
+            # Ensure log directory exists with correct permissions
+            mkdir -p /root/crm-qi-logs
+            chown 999:999 /root/crm-qi-logs
 
-            # Recreate log volume directory if needed
-            docker volume create crm_qi_logs 2>/dev/null || true
-
-            # Stop old containers, start fresh
+            # Stop old container and start fresh (bind mount handles logs)
             docker compose down --remove-orphans 2>/dev/null || true
-            docker compose up -d --build
+            docker compose up -d
 
             # Show status
-            docker compose ps
+            docker ps --filter "name=crm-quality-inspector"
             echo "Deployment complete!"
           EOF
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
