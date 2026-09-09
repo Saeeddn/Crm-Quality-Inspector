@@ -394,6 +394,23 @@ function toggleLanguage() {
   applyLanguage(currentLang);
 }
 
+function applyLanguage(lang) {
+  localStorage.setItem('crm_qi_lang', lang);
+  document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr';
+  document.documentElement.lang = lang;
+  // Update lang buttons
+  const btns = [$('#langBtn'), $('#langBtnLogin')].filter(Boolean);
+  btns.forEach(btn => btn.textContent = lang === 'fa' ? 'EN' : 'فارسی');
+  // Update all data-i18n elements
+  $$('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (I18N[lang][key] !== undefined) el.textContent = I18N[lang][key];
+  });
+  // Update page title
+  const title = I18N[lang]['pageTitle'] || 'Quality Inspector';
+  document.title = title;
+}
+
 function switchTab(tab) {
   $$('.page').forEach(p => p.classList.add('hidden'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
