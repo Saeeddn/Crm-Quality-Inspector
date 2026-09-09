@@ -12,45 +12,51 @@ env:
 
 jobs:
   deploy:
-    name: Build & Deploy
+    name: Deploy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Setup SSH
         run: |
-          docker build -t crm-quality-inspector:deploy .
-          docker save crm-quality-inspector:deploy | gzip > /tmp/crm-qi-image.tar.gz
-          echo "Image saved: $(ls -lh /tmp/crm-qi-image.tar.gz)"
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ env.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Copy image to server
+      - name: Sync files to server
         run: |
-          scp -i "${{ secrets.DEPLOY_SSH_KEY }}" \
-            -o StrictHostKeyChecking=no \
-            /tmp/crm-qi-image.tar.gz \
-            ${SERVER_USER}@${SERVER_HOST}:/tmp/
+          rsync -avz \
+            --exclude='.git' \
+            --exclude='target' \
+            --exclude='*.log' \
+            --exclude='.hermes' \
+            -e "ssh -i ~/.ssh/id_ed25519" \
+            . ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:${{ env.PROJECT_DIR }}/
 
-      - name: Deploy on server
+      - name: Build and start on server
         run: |
-          ssh -i "${{ secrets.DEPLOY_SSH_KEY }}" \
-            -o StrictHostKeyChecking=no \
-            ${SERVER_USER}@${SERVER_HOST} << 'EOF'
+          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} << 'EOF'
             set -e
             cd $PROJECT_DIR
-
-            # Load the image
-            docker load < /tmp/crm-qi-image.tar.gz
-            rm /tmp/crm-qi-image.tar.gz
-
-            # Ensure log directory exists with correct permissions
+            
+            # Ensure log directory exists
             mkdir -p /root/crm-qi-logs
             chown 999:999 /root/crm-qi-logs
-
-            # Stop old container and start fresh (bind mount handles logs)
+            
+            # Create .env if not exists
+            if [ ! -f .env ]; then
+              cp .env.example .env
+            fi
+            
+            # Pull latest image (fast if unchanged) then restart
             docker compose down --remove-orphans 2>/dev/null || true
-            docker compose up -d
-
-            # Show status
+            docker compose up -d --build
+            
+            echo ""
+            echo "=== Deployment Status ==="
             docker ps --filter "name=crm-quality-inspector"
-            echo "Deployment complete!"
+            echo ""
+            echo "Logs: curl http://${{ env.SERVER_HOST }}:3000/api/health"
+            echo "App log: tail -f /root/crm-qi-logs/crm-quality-inspector.log"
           EOF
