@@ -9,6 +9,11 @@ env:
   SERVER_HOST: 138.201.144.251
   SERVER_USER: root
   PROJECT_DIR: /root/crm-quality-inspector
+  DATABASE_URL: "postgres://crm_quality:knVnXLtwmtKEG3wgG60HnsI@127.0.0.1:5432/crm_quality_inspector"
+  ADMIN_USERNAME: admin
+  ADMIN_PASSWORD: knVnXLtwmtKEG3wgG60HnsI
+  SERVER_PORT: "3000"
+  LOG_FILE: /var/log/crm-qi/crm-quality-inspector.log
 
 jobs:
   deploy:
@@ -32,9 +37,12 @@ jobs:
             --exclude='*.log' \
             --exclude='.hermes' \
             --exclude='.env' \
-            --delete \
             -e "ssh -i ~/.ssh/id_ed25519" \
             . ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:${{ env.PROJECT_DIR }}/
+
+      - name: Create .env on server
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "echo 'DATABASE_URL=${{ env.DATABASE_URL }}' > $PROJECT_DIR/.env && echo 'ADMIN_USERNAME=${{ env.ADMIN_USERNAME }}' >> $PROJECT_DIR/.env && echo 'ADMIN_PASSWORD=${{ env.ADMIN_PASSWORD }}' >> $PROJECT_DIR/.env && echo 'SERVER_HOST=0.0.0.0' >> $PROJECT_DIR/.env && echo 'SERVER_PORT=${{ env.SERVER_PORT }}' >> $PROJECT_DIR/.env && echo 'LOG_FILE=${{ env.LOG_FILE }}' >> $PROJECT_DIR/.env"
 
       - name: Build and start on server
         run: |
@@ -45,12 +53,6 @@ jobs:
             # Ensure log directory exists with correct permissions
             mkdir -p /root/crm-qi-logs
             chown 999:999 /root/crm-qi-logs
-            
-            # Ensure .env exists (don't overwrite existing credentials)
-            if [ ! -f .env ]; then
-              echo "Creating .env from .env.example (credentials may need updating)"
-              cp .env.example .env
-            fi
             
             # Stop old container and rebuild
             docker compose down --remove-orphans 2>/dev/null || true
