@@ -400,7 +400,7 @@ function applyLanguage(lang) {
   document.documentElement.lang = lang;
   // Update lang buttons
   const btns = [$('#langBtn'), $('#langBtnLogin')].filter(Boolean);
-  btns.forEach(btn => btn.textContent = lang === 'fa' ? 'EN' : 'فارسی');
+  btns.forEach(btn => btn.textContent = lang === 'fa' ? '🇮🇷 FA' : '🇬🇧 EN');
   // Update all data-i18n elements
   $$('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
