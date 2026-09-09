@@ -111,6 +111,7 @@ pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         .fetch_one(&state.store.pool)
         .await
         .is_ok();
+    tracing::debug!(db_ok, "health check");
     if db_ok {
         ok(json!({ "status": "ok", "database": "connected" }))
     } else {
@@ -127,10 +128,13 @@ pub async fn login(
         .get_user(&req.username)
         .await?
         .ok_or_else(|| AppError::Auth("کاربر یافت نشد".into()))?;
+    tracing::info!(username = %req.username, "login attempt");
     if !verify_password(&req.password, &user.password_hash)? {
+        tracing::warn!(username = %req.username, "login failed: wrong password");
         return Err(AppError::Auth("رمز عبور اشتباه است".into()));
     }
     let session = state.sessions.create(&user.username, user.is_admin);
+    tracing::info!(username = %user.username, is_admin = user.is_admin, "login successful");
     Ok(ok(json!({
         "username": user.username,
         "is_admin": user.is_admin,

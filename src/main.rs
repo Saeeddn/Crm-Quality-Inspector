@@ -1,3 +1,4 @@
+use std::sync::Mutex;
 use std::net::SocketAddr;
 use crm_qi::{build_app, AppState};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -17,22 +18,21 @@ async fn main() {
     let _ = std::io::Write::flush(&mut std::io::stderr());
 
     // Initialize tracing — write to both stderr (Hermes terminal) and a log file on disk.
-    // Log level controlled by LOG_LEVEL env var: trace, debug, info, warn, error (default: debug).
-    let log_level = std::env::var("LOG_LEVEL").unwrap_or_else(|_| "debug".to_string());
+    // Log level controlled by LOG_LEVEL env var: trace, debug, info, warn, error (default: info).
+    let log_level = std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
     let env_filter = format!("crm_qi={}", log_level);
     let env_filter = tracing_subscriber::EnvFilter::try_new(env_filter)
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"));
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
 
-    // File layer — logs appended to crm-quality-inspector.log
-    // Keep the NonBlocking guard in scope to prevent premature flush loss
-    let (file_writer, _file_guard) = tracing_appender::non_blocking(std::fs::OpenOptions::new()
+    // File layer — logs appended to crm-quality-inspector.log with synchronous writes (flush after each)
+    let logfile = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open("crm-quality-inspector.log")
-        .expect("failed to open log file"));
+        .expect("failed to open log file");
     let file_layer = tracing_subscriber::fmt::layer()
         .with_target(false)
-        .with_writer(file_writer)
+        .with_writer(Mutex::new(logfile))
         .with_ansi(false);
 
     // Stderr layer — for Hermes terminal visibility
@@ -48,6 +48,7 @@ async fn main() {
         .init();
     eprintln!("[boot] tracing initialized");
     let _ = std::io::Write::flush(&mut std::io::stderr());
+    tracing::info!("LOG_LEVEL={} FILE=crm-quality-inspector.log", log_level);
 
     // DATABASE_URL must be provided via env var. There is no insecure default —
     // refusing to start is the only safe behavior for a public image.
