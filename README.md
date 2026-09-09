@@ -36,11 +36,15 @@ A modern, high-performance call center quality assurance (QA) platform built for
 ### 🎨 UX
 - Modern dark RTL interface (Linear/Vercel-inspired)
 - Persian/Farsi native support
-- **Mobile-responsive design** — full slide-out navigation panel with all 12 tabs, card-style table layout on small screens
+- **Mobile-responsive design** — full slide-out navigation panel with all 12 tabs, card-style table layout on small screens, SVG nav icons for all menu items, sidebar scrollbar hide, and desktop footer fix
 - **User badge in topbar** — current username displayed on mobile; also shown in sidebar footer on desktop
 - **Token expiry toast** — "نشست شما منقضی شده" + redirect to login
 - Modal-based scoring with 7-slider rubric
 - Filter interactions by channel, agent, status
+
+### 📋 Audit & Compliance
+- **Audit Log + Compliance Trail** — full audit log tracking all critical write operations (scores, issues, coaching plans, calibration sessions); admin-only tab with Persian action labels, pagination, and filter-by-action dropdown
+- **File logging** — structured tracing logs written to `crm-quality-inspector.log` with configurable log level via `LOG_LEVEL` env var (info/debug/warn/error)
 
 ### 🔐 Security
 - **Bearer-token sessions** (24h TTL)
@@ -374,10 +378,6 @@ Before exposing this app to the public internet:
 
 ## 🔮 Roadmap
 
-- [x] **Customer Risk Score** — auto-rank customers by churn probability based on scoring gaps, open issues, and interaction recency
-- [x] **Audit Log + Compliance Trail** — full audit log tracking all critical write operations (scores, issues, coaching plans, calibration sessions); admin-only tab with Persian action labels, pagination, and filter-by-action dropdown. Logged actions include: score_interaction, create_issue, resolve_issue, acknowledge_coaching, close_coaching, submit_calibration_score
-- [x] **Mobile-responsive UI** — full slide-out navigation panel with all 12 tabs, card-style table layout on small screens, mobile topbar with menu button and user badge, SVG nav icons for all menu items, sidebar scrollbar hide, and desktop footer fix
-- [x] **File logging** — structured tracing logs written to `crm-quality-inspector.log` with configurable log level via `LOG_LEVEL` env var (info/debug/warn/error)
 - [ ] AI-assisted scoring using LLM (suggest scores based on transcript)
 - [ ] Real-time sentiment analysis (WebSocket stream)
 - [ ] Multi-tenant support (organization isolation)
