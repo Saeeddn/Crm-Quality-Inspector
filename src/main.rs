@@ -23,14 +23,13 @@ async fn main() {
     let env_filter = tracing_subscriber::EnvFilter::try_new(env_filter)
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"));
 
-    // File layer — logs appended to crm-quality-inspector.log with auto-flush
-    let logfile = std::fs::OpenOptions::new()
+    // File layer — logs appended to crm-quality-inspector.log
+    // Keep the NonBlocking guard in scope to prevent premature flush loss
+    let (file_writer, _file_guard) = tracing_appender::non_blocking(std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open("crm-quality-inspector.log")
-        .expect("failed to open log file");
-    // Use non-blocking writer to avoid IO stalls and enable auto-flush
-    let (file_writer, _guard) = tracing_appender::non_blocking(logfile);
+        .expect("failed to open log file"));
     let file_layer = tracing_subscriber::fmt::layer()
         .with_target(false)
         .with_writer(file_writer)
