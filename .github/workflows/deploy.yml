@@ -31,6 +31,7 @@ jobs:
             --exclude='target' \
             --exclude='*.log' \
             --exclude='.hermes' \
+            --exclude='.env' \
             --delete \
             -e "ssh -i ~/.ssh/id_ed25519" \
             . ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:${{ env.PROJECT_DIR }}/
@@ -45,8 +46,9 @@ jobs:
             mkdir -p /root/crm-qi-logs
             chown 999:999 /root/crm-qi-logs
             
-            # Create .env if not exists (preserve existing credentials)
+            # Ensure .env exists (don't overwrite existing credentials)
             if [ ! -f .env ]; then
+              echo "Creating .env from .env.example (credentials may need updating)"
               cp .env.example .env
             fi
             
