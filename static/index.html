@@ -12,23 +12,26 @@
 <!-- Login screen -->
 <div id="loginScreen" class="login-screen">
   <div class="login-card">
-    <div class="login-brand">
-      <div class="login-logo">Q</div>
-      <h1>Quality Inspector</h1>
-      <p>سامانه ارزیابی کیفیت تعاملات CRM</p>
+  <div class="login-brand">
+    <div class="login-logo">Q</div>
+    <h1 data-i18n="loginTitle">Quality Inspector</h1>
+    <p data-i18n="loginSubtitle">سامانه ارزیابی کیفیت تعاملات CRM</p>
+  </div>
+  <div class="lang-switch-login" style="text-align:center;margin-bottom:16px">
+    <button id="langBtnLogin" class="btn btn-ghost btn-sm" onclick="toggleLanguage()" title="Change language">EN</button>
+  </div>
+  <form id="loginForm" class="login-form">
+    <div class="field">
+      <label data-i18n="loginUsername">نام کاربری</label>
+      <input id="loginUser" type="text" autocomplete="username">
     </div>
-    <form id="loginForm" class="login-form">
-      <div class="field">
-        <label>نام کاربری</label>
-        <input id="loginUser" type="text" autocomplete="username">
-      </div>
-      <div class="field">
-        <label>رمز عبور</label>
-        <input id="loginPass" type="password" autocomplete="current-password">
-      </div>
-      <button type="submit" class="btn btn-primary btn-block">ورود</button>
-      <div id="loginError" class="login-error"></div>
-    </form>
+    <div class="field">
+      <label data-i18n="loginPassword">رمز عبور</label>
+      <input id="loginPass" type="password" autocomplete="current-password">
+    </div>
+    <button type="submit" class="btn btn-primary btn-block" data-i18n="loginButton">ورود</button>
+    <div id="loginError" class="login-error"></div>
+  </form>
   </div>
 </div>
 
@@ -39,62 +42,62 @@
     <div class="sidebar-brand">
       <div class="brand-mark">Q</div>
       <div>
-        <div class="brand-title">Quality Inspector</div>
-        <div class="brand-sub">سامانه ارزیابی کیفیت</div>
+        <div class="brand-title" data-i18n="brandTitle">Quality Inspector</div>
+        <div class="brand-sub" data-i18n="brandSub">سامانه ارزیابی کیفیت</div>
       </div>
     </div>
     <nav class="sidebar-nav">
       <a class="nav-item active" data-tab="dashboard">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        داشبورد
+        <span data-i18n="navDashboard">داشبورد</span>
       </a>
       <a class="nav-item" data-tab="interactions">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-        تعاملات
+        <span data-i18n="navInteractions">تعاملات</span>
       </a>
       <a class="nav-item" data-tab="agents">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-4-4H17a4 4 0 00-4 4v2"/><circle cx="19" cy="7" r="3"/></svg>
-        کارشناسان
+        <span data-i18n="navAgents">کارشناسان</span>
       </a>
       <a class="nav-item" data-tab="customers">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        مشتریان
+        <span data-i18n="navCustomers">مشتریان</span>
       </a>
       <a class="nav-item" data-tab="risk">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        سلامت مشتریان
+        <span data-i18n="navRisk">سلامت مشتریان</span>
       </a>
       <a class="nav-item" data-tab="recommendations">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><line x1="9" y1="10" x2="15" y2="10"/></svg>
-        پیشنهادها
+        <span data-i18n="navRecommendations">پیشنهادها</span>
       </a>
       <a class="nav-item" data-tab="issues">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        ایرادات
+        <span data-i18n="navIssues">ایرادات</span>
       </a>
       <a class="nav-item" data-tab="coaching">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
-        برنامههای آموزشی
+        <span data-i18n="navCoaching">برنامههای آموزشی</span>
       </a>
       <a class="nav-item" data-tab="calibration">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-        کالیبراسیون
+        <span data-i18n="navCalibration">کالیبراسیون</span>
       </a>
       <a class="nav-item" data-tab="rubrics">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
-        استانداردها
+        <span data-i18n="navRubrics">استانداردها</span>
       </a>
       <a class="nav-item" data-tab="report">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        گزارش کارشناس
+        <span data-i18n="navReport">گزارش کارشناس</span>
       </a>
       <a class="nav-item" data-tab="users">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        کاربران
+        <span data-i18n="navUsers">کاربران</span>
       </a>
       <a class="nav-item" data-tab="audit" id="auditNavItem" style="display:none">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><path d="M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-        لاگ حسابرسی
+        <span data-i18n="navAudit">لاگ حسابرسی</span>
       </a>
     </nav>
     <div class="sidebar-footer">
@@ -194,20 +197,20 @@
     <div class="page" id="page-dashboard">
       <div class="kpi-grid" id="kpiGrid"></div>
       <div class="card">
-        <div class="card-header"><h3>روند پوشش ارزیابی</h3></div>
+        <div class="card-header"><h3 data-i18n="coverageTrend">روند پوشش ارزیابی</h3></div>
         <div class="card-body" id="coverageBar"></div>
       </div>
       <div class="card">
-        <div class="card-header"><h3>روند امتیازات</h3></div>
+        <div class="card-header"><h3 data-i18n="scoreTrend">روند امتیازات</h3></div>
         <div class="card-body" style="height:260px"><canvas id="trendChart"></canvas></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="card">
-          <div class="card-header"><h3>توزیع کیفیت</h3></div>
+          <div class="card-header"><h3 data-i18n="qualityDistribution">توزیع کیفیت</h3></div>
           <div class="card-body" style="height:260px"><canvas id="scoreChart"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-header"><h3>عملکرد کارشناسان</h3></div>
+          <div class="card-header"><h3 data-i18n="agentPerformance">عملکرد کارشناسان</h3></div>
           <div class="card-body" style="height:260px"><canvas id="agentChart"></canvas></div>
         </div>
       </div>
