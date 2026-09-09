@@ -38,22 +38,18 @@ jobs:
 
       - name: Create env on server
         run: |
-          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} bash <<'SSH_EOF'
-          cat > /root/crm-quality-inspector/.env <<'ENV_EOF'
-DATABASE_URL=postgres://crm_quality:PASSWORD@127.0.0.1:5432/crm_quality_inspector
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=PASSWORD
-SERVER_HOST=0.0.0.0
-SERVER_PORT=3000
-LOG_FILE=/var/log/crm-qi/crm-quality-inspector.log
-ENV_EOF
-          sed -i "s/ADMIN_PASSWORD=PASSWORD/ADMIN_PASSWORD=${DB_PASSWORD}/" /root/crm-quality-inspector/.env
-          sed -i "s/db_password/${DB_PASSWORD}/" /root/crm-quality-inspector/.env
-          SSH_EOF
+          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} bash -c '
+            echo "DATABASE_URL=postgres://crm_quality:${{ env.DB_PASSWORD }}@127.0.0.1:5432/crm_quality_inspector" > /root/crm-quality-inspector/.env
+            echo "ADMIN_USERNAME=admin" >> /root/crm-quality-inspector/.env
+            echo "ADMIN_PASSWORD=${{ env.DB_PASSWORD }}" >> /root/crm-quality-inspector/.env
+            echo "SERVER_HOST=0.0.0.0" >> /root/crm-quality-inspector/.env
+            echo "SERVER_PORT=3000" >> /root/crm-quality-inspector/.env
+            echo "LOG_FILE=/var/log/crm-qi/crm-quality-inspector.log" >> /root/crm-quality-inspector/.env
+          '
 
       - name: Build and start on server
         run: |
-          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "cd $PROJECT_DIR && docker compose build && docker compose down && docker compose up -d"
+          ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "cd $PROJECT_DIR && docker compose down 2>/dev/null || true && docker compose build && docker compose up -d"
 
       - name: Verify deployment
         run: |
