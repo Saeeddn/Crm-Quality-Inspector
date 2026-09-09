@@ -24,21 +24,15 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ env.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Sync files to server
-        run: |
-          rsync -avz \
-            --exclude='.git' \
-            --exclude='target' \
-            --exclude='*.log' \
-            --exclude='.hermes' \
-            -e "ssh -i ~/.ssh/id_ed25519" \
-            . ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:${{ env.PROJECT_DIR }}/
-
-      - name: Build and start on server
+      - name: Build Docker image on server
         run: |
           ssh -i ~/.ssh/id_ed25519 ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} << 'EOF'
             set -e
             cd $PROJECT_DIR
+            
+            # Pull latest code
+            git config --global --add safe.directory $PROJECT_DIR
+            git pull origin master
             
             # Ensure log directory exists
             mkdir -p /root/crm-qi-logs
@@ -49,7 +43,7 @@ jobs:
               cp .env.example .env
             fi
             
-            # Pull latest image (fast if unchanged) then restart
+            # Stop old container and rebuild
             docker compose down --remove-orphans 2>/dev/null || true
             docker compose up -d --build
             
@@ -57,6 +51,7 @@ jobs:
             echo "=== Deployment Status ==="
             docker ps --filter "name=crm-quality-inspector"
             echo ""
-            echo "Logs: curl http://${{ env.SERVER_HOST }}:3000/api/health"
-            echo "App log: tail -f /root/crm-qi-logs/crm-quality-inspector.log"
+            echo "App URL: http://${{ env.SERVER_HOST }}:3000"
+            echo "Health: curl http://${{ env.SERVER_HOST }}:3000/api/health"
+            echo "Logs: tail -f /root/crm-qi-logs/crm-quality-inspector.log"
           EOF
