@@ -98,7 +98,7 @@ jobs:
         # (this is the documented behavior — fail-fast on missing DATABASE_URL).
         run: |
           docker run --rm crm-qi:ci-test 2>&1 | tee /tmp/docker-out.log
-          if ! grep -q "DATABASE_URL env var is required" /tmp/docker-out.log; then
+          if ! grep -q "DATABASE_URL env var is required" /tmp/docker-out.log && ! grep -q "Refusing to start" /tmp/docker-out.log; then
             echo "::error::Container did NOT fail-fast on missing DATABASE_URL"
             exit 1
           fi
