@@ -19,9 +19,9 @@ async fn main() {
     // Initialize tracing — write to stderr, line-buffered so we see it in Hermes terminal.
     // Log level controlled by LOG_LEVEL env var: trace, debug, info, warn, error (default: info).
     let log_level = std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
-    let env_filter = tracing_subscriber::EnvFilter::try_new(format!("crm_qi={}", log_level))
-        .or_else(|_| tracing_subscriber::EnvFilter::from_default_env())
-        .unwrap();
+    let env_filter = format!("crm_qi={}", log_level);
+    let env_filter = tracing_subscriber::EnvFilter::try_new(env_filter)
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer()
             .with_target(false)
