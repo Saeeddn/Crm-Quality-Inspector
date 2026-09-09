@@ -228,7 +228,7 @@ const I18N = {
     calibrationStatusOptions: ['draft', 'scoring', 'in_session', 'completed', 'cancelled'],
 
     // Dashboard detail strings
-    scoredCountFmt: (n, total) => n + ' از ' + total + ' تعامل ارزیابی شده',
+    scoredCountFmt: function(n, total) { return n + ' از ' + total + ' تعامل ارزیابی شده'; },
     chartNoDataLabel: 'برای نمایش نمودار، حداقل ۲ ارزیابی لازم است',
     exportCsvBtn: 'خروجی CSV',
     newInteractionBtn: '+ ثبت تعامل',
@@ -237,11 +237,6 @@ const I18N = {
     allAgents: 'همه کارشناسان',
     allStatuses: 'همه وضعیتها',
     allSeverities: 'همه شدتها',
-    channelOptions: ['تلفن', 'حضوری', 'ایمیل', 'چت', 'پیامک'],
-    statusOptions: ['باز', 'بسته'],
-    severityOptions: ['بحرانی', 'بالا', 'متوسط', 'پایین'],
-    coachingStatusOptions: ['پیشنویس', 'در انتظار تایید', 'تایید شده', 'در حال اجرا', 'تاییدشده با پیگیری', 'بسته شده', 'معوق/ارجاع'],
-    calibrationStatusOptions: ['draft', 'scoring', 'in_session', 'completed', 'cancelled'],
     reviewBtn: 'بازبینی',
     autoScoreBtn: 'ارزیابی خودکار',
     autoScoreTitle: 'ارزیابی خودکار',
@@ -288,44 +283,6 @@ const I18N = {
     requiredSubjectTranscriptError: 'موضوع و متن الزامی است',
     manualKpiOption: 'دستی (امتیاز توسط ارزیاب)',
     autoScoreResultSaved: function(score, level) { return `امتیاز ${score.toFixed(1)} (${level}) ذخیره شد`; },
-    kpiAgentsLabel: 'کارشناسان',
-    kpiCustomersLabel: 'مشتریان',
-    kpiInteractionsLabel: 'تعاملات',
-    kpiCoverageLabel: 'پوشش ارزیابی',
-    kpiAvgScoreLabel: 'میانگین کیفیت',
-    kpiOpenIssuesLabel: 'ایرادات باز',
-    kpiQualityGradeLabel: 'گرید کیفیت',
-    kpiAvgScoreText: 'میانگین امتیاز',
-    colDate: 'تاریخ',
-    colAgent: 'کارشناس',
-    colCustomer: 'مشتری',
-    colChannel: 'کانال',
-    colSubject: 'موضوع',
-    colScore: 'امتیاز',
-    colActions: 'عملیات',
-    exportCsvHeaders: ['شناسه','تاریخ','کارشناس','مشتری','کانال','موضوع','امتیاز','سطح','بحرانی','یادداشت'],
-    viewInterBtn: 'مشاهده',
-    emptyAgentMsg: 'کارشناسی یافت نشد',
-    newAgentTitle: 'ثبت کارشناس',
-    agentPosPlaceholder: 'مثال: کارشناس ارشد',
-    agentSavedToast: 'کارشناس ثبت شد',
-    editCustomerTitle: (name) => 'ویرایش مشتری: ' + name,
-    customerUpdatedToast: 'مشتری بهروزرسانی شد',
-    newCustomerTitle: 'ثبت مشتری',
-    customerSavedToast: 'مشتری ثبت شد',
-    selectAgentPlaceholder: '— کارشناسی نیست —',
-    reportSelectPlaceholder: 'انتخاب کارشناس...',
-    dateCol: 'تاریخ',
-    scoreCol: 'امتیاز',
-    levelCol: 'سطح',
-    statusCol: 'وضعیت',
-    coachingThemePlaceholder: 'مثلاً احوالپرسی آغازین',
-    behaviorGapPlaceholder: 'مثلاً عدم احوالپرسی با مشتری',
-    customerImpactPlaceholder: 'مثلاً کاهش رضایت',
-    requiredAgentError: 'کارشناس الزامی است',
-    requiredSubjectTranscriptError: 'موضوع و متن الزامی است',
-    manualKpiOption: 'دستی (امتیاز توسط ارزیاب)',
-    autoScoreResultSaved: (score, level) => `امتیاز ${score.toFixed(1)} (${level}) ذخیره شد`,
     transcriptPlaceholder: 'مثال: سلام. مشتری با عصبانیت شکایت کرد که ...',
     colSessionName: 'نام جلسه',
     colStandard: 'استاندارد',
@@ -333,297 +290,114 @@ const I18N = {
     colAgreement: 'توافق',
     colDeadline: 'مهلت',
     colName: 'نام',
-    colDepartment: 'واحد',
-    colPosition: 'سمت',
-    kpisLoadedToast: (n) => n + ' KPI بارگذاری شد',
-    coachLoadedToast: 'خطa در بارگذاری برنامههای آموزشی:',
-    calLoadedToast: 'خطa در بارگذاری کالیبراسیون:',
-    coachLoadLabel: 'در حال بارگذاری برنامههای آموزشی...',
-    calLoadLabel: 'در حال بارگذاری کالیبراسیون...',
-    calSessionLoadLabel: 'در حال بارگذاری جلسه...',
-    createCalLabel: 'در حال ایجاد جلسه...',
-    submitScoresLabel: 'در حال ثبت امتیازها...',
-    createCoachLabel: 'در حال ایجاد برنامه...',
-    loadingAllLabel: 'در حال بارگذاری...',
-    enteringLoginLabel: 'در حال ورود...',
-    kpiAgentsLabel: 'Agents',
-    kpiCustomersLabel: 'Customers',
-    kpiInteractionsLabel: 'Interactions',
-    kpiCoverageLabel: 'Assessment Coverage',
-    kpiAvgScoreLabel: 'Avg Quality Score',
-    kpiOpenIssuesLabel: 'Open Issues',
-    kpiQualityGradeLabel: 'Quality Grade',
-    kpiAvgScoreText: 'Average Score',
-    colDate: 'Date',
-    colAgent: 'Agent',
-    colCustomer: 'Customer',
-    colChannel: 'Channel',
-    colSubject: 'Subject',
-    colScore: 'Score',
-    colActions: 'Actions',
-    exportCsvHeaders: ['ID','Date','Agent','Customer','Channel','Subject','Score','Level','Critical','Notes'],
-    viewInterBtn: 'View',
-    emptyAgentMsg: 'No agents found',
-    newAgentTitle: 'Register Agent',
-    agentPosPlaceholder: 'e.g. Senior Agent',
-    agentSavedToast: 'Agent registered',
-    editCustomerTitle: function(name) { return 'Edit Customer: ' + name; },
-    customerUpdatedToast: 'Customer updated',
-    newCustomerTitle: 'Add Customer',
-    customerSavedToast: 'Customer saved',
-    selectAgentPlaceholder: '— No agent —',
-    reportSelectPlaceholder: 'Select agent...',
-    dateCol: 'Date',
-    scoreCol: 'Score',
-    levelCol: 'Level',
-    statusCol: 'Status',
-    coachingThemePlaceholder: 'e.g. Initial greeting',
-    behaviorGapPlaceholder: 'e.g. No greeting to customer',
-    customerImpactPlaceholder: 'e.g. Reduced satisfaction',
-    requiredAgentError: 'Agent is required',
-    requiredSubjectTranscriptError: 'Subject and transcript are required',
-    manualKpiOption: 'Manual (scored by evaluator)',
-    autoScoreResultSaved: function(score, level) { return `Score ${score.toFixed(1)} (${level}) saved`; },
-    kpiAgentsLabel: 'Agents',
-    kpiCustomersLabel: 'Customers',
-    kpiInteractionsLabel: 'Interactions',
-    kpiCoverageLabel: 'Assessment Coverage',
-    kpiAvgScoreLabel: 'Avg Quality Score',
-    kpiOpenIssuesLabel: 'Open Issues',
-    kpiQualityGradeLabel: 'Quality Grade',
-    kpiAvgScoreText: 'Average Score',
-    colDate: 'Date',
-    colAgent: 'Agent',
-    colCustomer: 'Customer',
-    colChannel: 'Channel',
-    colSubject: 'Subject',
-    colScore: 'Score',
-    colActions: 'Actions',
-    exportCsvHeaders: ['ID','Date','Agent','Customer','Channel','Subject','Score','Level','Critical','Notes'],
-    viewInterBtn: 'View',
-    emptyAgentMsg: 'No agents found',
-    newAgentTitle: 'Register Agent',
-    agentPosPlaceholder: 'e.g. Senior Agent',
-    agentSavedToast: 'Agent registered',
-    editCustomerTitle: (name) => 'Edit Customer: ' + name,
-    customerUpdatedToast: 'Customer updated',
-    newCustomerTitle: 'Add Customer',
-    customerSavedToast: 'Customer saved',
-    selectAgentPlaceholder: '-- No agent --',
-    reportSelectPlaceholder: 'Select agent...',
-    dateCol: 'Date',
-    scoreCol: 'Score',
-    levelCol: 'Level',
-    statusCol: 'Status',
-    coachingThemePlaceholder: 'e.g. Initial greeting',
-    behaviorGapPlaceholder: 'e.g. No greeting to customer',
-    customerImpactPlaceholder: 'e.g. Reduced satisfaction',
-    requiredAgentError: 'Agent is required',
-    requiredSubjectTranscriptError: 'Subject and transcript are required',
-    manualKpiOption: 'Manual (scored by evaluator)',
-    autoScoreResultSaved: (score, level) => `Score ${score.toFixed(1)} (${level}) saved`,
-    transcriptPlaceholder: 'e.g. Hello. The customer complained angrily about...',
-    colSessionName: 'Session Name',
-    colStandard: 'Rubric',
-    colSamples: 'Samples',
-    colAgreement: 'Agreement',
-    colDeadline: 'Due',
-    colName: 'Name',
-    colDepartment: 'Department',
-    colPosition: 'Position',
-    calStatusMap: {'draft': 'پیشنویس', 'scoring': 'در حال امتیازدهی', 'in_session': 'در جلسه', 'completed': 'تکمیلشده', 'cancelled': 'لغو شده'},
-    coachStatusMap: {'draft': 'پیشنویس', 'pending_acknowledgement': 'در انتظار تایید', 'acknowledged': 'تایید شده', 'in_progress': 'در حال اجرا', 'verified': 'تاییدشده با پیگیری', 'closed': 'بسته شده', 'escalated': 'معوق/ارجاع'},
-
-    // Detail strings
-    criticalFailLabel: 'شکست بحرانی',
-    evaluatorLabel: 'ارزیاب',
-    noKpiDefined: 'هیچ KPI تعریف نشده است',
-    criticalFailNote: 'شکست بحرانی (اگر نمره کمتر از ۶۰ باشد، کل interaction شکست میخورد)',    isOpenStatus: 'باز',
-    isClosedStatus: 'بسته',
-    isActiveAgent: 'فعال',
-    isInactiveAgent: 'غیرفعال',
-    csvDownloadedToast: 'فایل CSV دانلود شد',
-    yesText: 'بله',
-    noText: 'خیر',
-        // Priority pill labels
-    priorityHigh: 'بالا',
-    priorityMedium: 'متوسط',
-    priorityLow: 'پایین',
-    priorityLabel: 'اولویت',
     
-    // Severity pill labels
-    severityCritical: 'بحرانی',
-    severityHigh: 'بالا',
-    severityMedium: 'متوسط',
-    severityLow: 'پایین',
-    
-    // Customer risk labels
-    riskHigh: 'ریسک بالا',
-    riskHighSub: 'نیاز به تماس فوری',
-    riskMed: 'ریسک متوسط',
-    riskMedSub: 'نیاز به پیگیری',
-    riskLow: 'ریسک پایین',
-    riskLowSub: 'نظارت عادی',
-    totalCustomersLabel: 'کل مشتریان',
-    withRiskScoreLabel: 'با Risk Score',
-    noDataAvailable: 'دادهای موجود نیست',
-    moreLabel: 'بیشتر',
-    
-    // Chart labels
-    avgQualityScore: 'میانگین امتیاز کیفیت',
-    healthyLabel: 'سالم (≥80)',
-    needImproveLabel: 'نیازمند بهبود (60-80)',
-    criticalLabel: 'بحرانی (<60)',
-    noRecordLabel: 'بدون رکورد',
-    customPageSize: 'سفارشی...',
-    pageSizePlaceholder: 'تعداد',
-    paginationInfo: function(start, end, total, page, totalPages) { 
-        return `نمایش <b>${start}–${end}</b> از <b>${total}</b> رکورد (صفحه ${page} از ${totalPages})`; 
-    },
-    firstPage: '« اول',
-    prevPage: '‹ قبلی',
-    nextPage: 'بعدی ›',
-    lastPage: 'آخر »',
-    pageSizeLabel: 'تعداد در صفحه:',
-    pageSizePrompt: 'تعداد در صفحه را وارد کنید (۱ تا ۱۰۰۰):',
-    allAgentsLabel: 'همه کارشناسان',
-    autoScoreProgress: function(count) { return `در حال اندازهگیری خودکار ${count} KPI...`; },
-    interactionDetailTitle: 'جزئیات تعامل',
-    transcriptLabel: 'متن مکالمه:',
-    criticalFailLabel: 'شکست بحرانی',
-    evaluatorNote: 'یادداشت ارزیاب (اختیاری)',
-    notesPlaceholder: 'نکات تکمیلی شما',
-    saveToDashboard: 'ذخیره در داشبورد',
-    cancelBtn: 'انصراف',
-    saveBtn: 'ذخیره',
-    noActiveKpiError: 'هیچ KPI فعالی',
-    allScoredMsg: 'همه تعاملات ارزیابی شدهاند. عالی!',
-    expertCustomerChannel: function(agent, customer, channel) { 
-        return `کارشناس: ${agent || '-'} | مشتری: ${customer || '-'} | کانال: ${channel}`; 
-    },
-    modalCloseBtn: 'بستن',
-    editUserLabel: 'تغییر رمز / نقش',
-    deleteBtn: 'حذف',
-    cannotDeleteSelf: 'نمیتوانید خودتان را حذف کنید',
-    confirmDelete: function(username) { return `کاربر "${username}" حذف شود؟`; },
-    userDeletedToast: 'کاربر حذف شد',
-    newUserTitle: 'ایجاد کاربر جدید',
-    usernameLabel: 'نام کاربری (حداقل ۳ کاراکتر)',
-    passwordLabel: 'رمز عبور (حداقل ۴ کاراکتر)',
-    adminAccessLabel: 'دسترسی مدیر سیستم',
-    createBtn: 'ایجاد',
-    usernameRequired: 'نام کاربری الزامی است',
-    userCreatedToast: 'کاربر ایجاد شد',
-    editUserTitle: function(username) { return `ویرایش کاربر: ${username}`; },
-    newPasswordLabel: 'رمز عبور جدید (خالی = بدون تغییر)',
-    updatedToast: 'کاربر بهroزرسانی شد',
-    onlyAdminAccessible: 'فقط مدیر سیستم دسترسی دارد',
-        // Product types
-    productBank: 'بانک',
-    productInsurance: 'بیمه',
-    productInvestment: 'سرمایهگذاری',
-    productLoan: 'وام',
-    
-    // Buttons
-    editBtn: 'ویرایش',
-    deleteBtn: 'حذف',
-    saveBtn: 'ذخیره',
-    cancelBtn: 'انصراف',
-    closeBtn: 'بستن',
-    reportBtn: 'گزارش',
-    
-    // Messages
-    emptyCustomerMsg: 'مشتری یافت نشد',
-    customerDeletedToast: 'حذف شد',
-    confirmDelete: function(name) { return `حذف ${name}؟`; },
-    isActiveAgent: 'فعال',
-    isInactiveAgent: 'غیرفعال',
-    
-    // Risk levels
-    riskHigh: 'ریسک بالا',
-    riskMed: 'ریسک متوسط',
-    riskLow: 'ریسک پایین',
-    riskHighSub: 'نیاز به تماس فوری',
-    riskMedSub: 'نیاز به پیگیری',
-    riskLowSub: 'نظارت عادی',
-    totalCustomersLabel: 'کل مشتریان',
-    withRiskScoreLabel: 'با Risk Score',
-    noDataAvailable: 'دادهای موجود نیست',
-    moreLabel: 'بیشتر',
     // More UI strings
-    pageInfoLabel: function(s,e,t,p,tp) { return `نمایش <b>${s}–${e}</b> از <b>${t}</b> رکورد (صفحه ${p} از ${tp})`; },
-    pageSizeLabel: 'تعداد در صفحه:',
-    pageSizePrompt: 'تعداد در صفحه را وارد کنید (۱ تا ۱۰۰۰):',
-    allAgentsOpt: 'همه کارشناسان',
-    autoScoreProgress: function(n) { return `در حال اندازهگیری خودکار ${n} KPI...`; },
-    interactionDetailTitle: 'جزئیات تعامل',
-    transcriptLabel: 'متن مکالمه:',
-    criticalFailLabel2: 'شکست بحرانی',
-    evaluatorNote: 'یادداشت ارزیاب (اختیاری)',
-    notesPlaceholder: 'نکات تکمیلی شما',
-    saveToDashboardBtn: 'ذخیره در داشبورد',
-    cancelBtn2: 'انصراف',
-    noActiveKpi: 'هیچ KPI فعالی',
-    kpiMsg: 'ابتدا KPI تعریف کنید یا پیشفرضها را بارگذاری کنید',
-    expertCustomerChannel: function(a,c,ch) { return `کارشناس: ${a || '-'} | مشتری: ${c || '-'} | کانال: ${ch}`; },
-    riskLabel: 'ریسک',
-    riskFactorsLabel: 'دلایل ریسک:',
-    suggestedActionLabel: 'اقدام پیشنهادی:',
-    autoScoreBtn2: 'ارزیابی خودکار',
-    activeLabel: 'فعال',
-    inactiveLabel: 'غیرفعال',
-    reportBtn2: 'گزارش',
+    pageInfoLabel: function(s,e,t,p,tp) { return `Showing <b>${s}–${e}</b> of <b>${t}</b> records (page ${p} of ${tp})`; },
+    pageSizeLabel: 'Items per page:',
+    pageSizePrompt: 'Enter page size (1-1000):',
+    allAgentsOpt: 'All Agents',
+    autoScoreProgress: function(n) { return `Auto-scoring ${n} KPIs...`; },
+    interactionDetailTitle: 'Interaction Details',
+    transcriptLabel: 'Transcript:',
+    criticalFailLabel2: 'Critical Failure',
+    evaluatorNote: 'Evaluator Notes (optional)',
+    notesPlaceholder: 'Your additional notes',
+    saveToDashboardBtn: 'Save to Dashboard',
+    cancelBtn2: 'Cancel',
+    noActiveKpi: 'No active KPIs',
+    kpiMsg: 'Define KPIs first or load defaults',
+    expertCustomerChannel: function(a,c,ch) { return `Agent: ${a || '-'} | Customer: ${c || '-'} | Channel: ${ch}`; },
+    riskLabel: 'Risk',
+    riskFactorsLabel: 'Risk Factors:',
+    suggestedActionLabel: 'Suggested Action:',
+    autoScoreBtn2: 'Auto Score',
+    activeLabel: 'Active',
+    inactiveLabel: 'Inactive',
+    reportBtn2: 'Report',
     toggleToast: function(active) { return active ? 'فعال شد' : 'غیرفعال شد'; },
     agentNameLabel: 'نام و نام خانوادگی',
     agentDeptLabel: 'واحد',
     agentPosLabel: 'سمت',
-    agentSavedToast: 'کارشناس ثبت شد',
     editCustLabel: 'ویرایش',
     deleteCustLabel: 'حذف',
     segmentLabel: 'سطح',
     segmentNormal: 'عادی',
     segmentImportant: 'مهم',
     notesFieldLabel: 'یادداشت',
-    customerUpdatedToast: 'مشتری بهroزرسانی شد',
-    newCustomerName: 'نام',
-    newCustomerPhone: 'تلفن',
-    newCustomerProduct: 'محصول',
-    newCustomerSeg: 'بخش',
     normalOpt: 'عادی',
     vipOpt: 'VIP',
     corpOpt: 'شرکتی',
     customerCreatedToast: 'مشتری ثبت شد',
-    // Score pills
-    scoreNotEvaluated: 'ارزیابینشده',
-    emptyTable: 'دادهای موجود نیست',
-
-
-    // Buttons
-    editBtn: 'Edit',
-    deleteBtn: 'Delete',
-    saveBtn: 'Save',
-    cancelBtn: 'Cancel',
-    closeBtn: 'Close',
-    reportBtn: 'Report',
     
-    // Messages
-    emptyCustomerMsg: 'No customers found',
-    customerDeletedToast: 'Deleted',
-    confirmDelete: (name) => `Delete ${name}?`,
-    isActiveAgent: 'Active',
-    isInactiveAgent: 'Inactive',
-    
-    // Product types
-    productBank: 'Bank',
-    productInsurance: 'Insurance',
-    productInvestment: 'Investment',
-    productLoan: 'Loan',
-    // Error messages
-    invalidResponse: 'پاسخ نامعتبر',
-
-    // RTL/LTR
-    dir: 'rtl',
-    lang: 'fa',
+    // New keys for 2026-09-09 fixes
+    scoresSavedToast: 'امتیازها ثبت شد',
+    issueClosedToast: 'ایراد بسته شد',
+    interactionSavedToast: 'تعامل ثبت شد',
+    userCreatedToast2: 'کاربر ایجاد شد',
+    userUpdatedToast: 'کاربر بهروزرسانی شد',
+    userDeletedToast2: 'کاربر حذف شد',
+    calSessionLoadLabel: 'در حال بارگذاری جلسه...',
+    calLoadedToast: 'خطa در بارگذاری کالیبراسیون:',
+    coachLoadLabel: 'در حال بارگذاری برنامههای آموزشی...',
+    coachLoadedToast: 'خطa در بارگذاری برنامههای آموزشی:',
+    toastLoadDashboard2: 'در حال محاسبه KPI و نمودارها...',
+    toastErrorDashboard2: 'خطa در بارگذاری داشبورد:',
+    loadingAllLabel: 'در حال بارگذاری...',
+    enteringLoginLabel: 'در حال ورود...',
+    csvDownloadedToast: 'CSV دانلود شد',
+    invalidResponse: 'پاسخ سرور نامعتبر است',
+    scoreNotEvaluated: 'تعیین نشده',
+    criticalFailLabel: 'شکست بحرانی',
+    criticalFailNote: 'یادداشت شکست بحرانی',
+    noKpiDefined: 'هیچ KPI تعریف نشده',
+    seedDefaultKpisBtn2: 'بارگذاری ۷ KPI پیشفرض',
+    customPageSize: 'اندازه صفحه سفارشی',
+    editBtn: 'ویرایش',
+    deleteBtn: 'حذف',
+    cancelBtn: 'انصراف',
+    saveBtn: 'ذخیره',
+    confirmDelete: 'آیا مطمئن هستید؟',
+    emptyCustomerMsg: 'مشتری یافت نشد',
+    coa: 'coaching',
+    cal: 'calibration',
+    reportSelect: 'گزارش',
+    noRecordLabel: 'رکوردی یافت نشد',
+    severity: 'شدت',
+    status: 'وضعیت',
+    yesText: 'بله',
+    noText: 'خیر',
+    moreLabel: 'بیشتر',
+    priorityLabel: 'اولویت',
+    priorityHigh: 'بالا',
+    priorityMedium: 'متوسط',
+    priorityLow: 'پایین',
+    isClosedStatus: 'بسته',
+    isOpenStatus: 'باز',
+    isActiveAgent: 'فعال',
+    isInactiveAgent: 'غیرفعال',
+    needImproveLabel: 'نیاز به بهبود',
+    healthyLabel: 'سالم',
+    evaluatorLabel: 'ارزیاب',
+    kpisLoadedToast: 'KPIها بارگذاری شدند',
+    createCalLabel: 'در حال ایجاد جلسه...',
+    createCoachLabel: 'در حال ایجاد برنامه...',
+    submitScoresLabel: 'در حال ثبت امتیازها...',
+    deleteCustConfirm: 'آیا از حذف این مشتری مطمئن هستید؟',
+    cannotDeleteSelf: 'نمیتوانید خودتان را حذف کنید',
+    kpiWeightError: 'وزن باید ۰-۱۰۰ باشد',
+    calcScoreLabel: 'محاسبه امتیاز...',
+    coaSaveLabel: 'ذخیره برنامه...',
+    saveToDashboardBtn2: 'ذخیره در داشبورد',
+    productBank: 'بانکی',
+    productInsurance: 'بیمهای',
+    productInvestment: 'سرمایهگذاری',
+    productLoan: 'وام',
+    coaStatusMap: { 'draft': 'پیشنویس', 'pending_acknowledgement': 'در انتظار تایید', 'acknowledged': 'تایید شده', 'in_progress': 'در حال اجرا', 'verified': 'تاییدشده با پیگیری', 'closed': 'بسته شده', 'escalated': 'معوق/ارجاع' },
+    calStatusMap: { 'draft': 'پیشنویس', 'scoring': 'در حال امتیازدهی', 'in_session': 'جلسه فعال', 'completed': 'تکمیل شده', 'cancelled': 'لغو شده' },
+    toastDataSaved: 'اطلاعات ذخیره شد',
+    toastUserDeleted: 'کاربر حذف شد',
+    toastDataLoaded: 'اطلاعات بارگذاری شد',
+    toastNoData: 'دادهای موجود نیست',
   },
 
   en: {
@@ -829,9 +603,9 @@ const I18N = {
     toastNoData: 'No data available',
 
     // Legend
-    legendHigh: 'High (Urgent)',
+    legendHigh: 'High (Immediate Contact)',
     legendMed: 'Medium (Follow-up)',
-    legendLow: 'Low (Monitor)',
+    legendLow: 'Low (Monitoring)',
 
     // Empty states
     emptyTable: 'No data available',
@@ -846,13 +620,13 @@ const I18N = {
     severityOptions: ['Critical', 'High', 'Medium', 'Low'],
 
     // Coaching status
-    coachingStatusOptions: ['Draft', 'Pending Acknowledgement', 'Acknowledged', 'In Progress', 'Verified with Follow-up', 'Closed', 'Escalated'],
+    coachingStatusOptions: ['Draft', 'Pending Review', 'Approved', 'In Progress', 'Verified with Follow-up', 'Closed', 'Escalated/Referred'],
 
     // Calibration status
     calibrationStatusOptions: ['draft', 'scoring', 'in_session', 'completed', 'cancelled'],
 
     // Dashboard detail strings
-    scoredCountFmt: (n, total) => n + ' of ' + total + ' interactions scored',
+    scoredCountFmt: function(n, total) { return n + ' of ' + total + ' interactions scored'; },
     chartNoDataLabel: 'At least 2 scores required to display chart',
     exportCsvBtn: 'Export CSV',
     newInteractionBtn: '+ New Interaction',
@@ -861,120 +635,19 @@ const I18N = {
     allAgents: 'All Agents',
     allStatuses: 'All Statuses',
     allSeverities: 'All Severities',
-    channelOptions: ['Phone', 'In-Person', 'Email', 'Chat', 'SMS'],
-    statusOptions: ['Open', 'Closed'],
-    severityOptions: ['Critical', 'High', 'Medium', 'Low'],
-    coachingStatusOptions: ['Draft', 'Pending Acknowledgement', 'Acknowledged', 'In Progress', 'Verified with Follow-up', 'Closed', 'Escalated'],
-    calibrationStatusOptions: ['draft', 'scoring', 'in_session', 'completed', 'cancelled'],
     reviewBtn: 'Review',
     autoScoreBtn: 'Auto Score',
     autoScoreTitle: 'Auto Scoring',
     savingText: 'Saving...',
     noKpiMsg: 'Define KPIs first or load defaults',
-    allInteractionsScored: 'All interactions scored. Great job!',
-    emptyScoreTable: 'No scores yet',
-    seedDefaultKpisBtn: 'Load Default KPIs',
-    kpiAgentsLabel: 'کارشناسان',
-    kpiCustomersLabel: 'مشتریان',
-    kpiInteractionsLabel: 'تعاملات',
-    kpiCoverageLabel: 'پوشش ارزیابی',
-    kpiAvgScoreLabel: 'میانگین کیفیت',
-    kpiOpenIssuesLabel: 'ایرادات باز',
-    kpiQualityGradeLabel: 'گرید کیفیت',
-    kpiAvgScoreText: 'میانگین امتیاز',
-    colDate: 'تاریخ',
-    colAgent: 'کارشناس',
-    colCustomer: 'مشتری',
-    colChannel: 'کانال',
-    colSubject: 'موضوع',
-    colScore: 'امتیاز',
-    colActions: 'عملیات',
-    exportCsvHeaders: ['شناسه','تاریخ','کارشناس','مشتری','کانال','موضوع','امتیاز','سطح','بحرانی','یادداشت'],
-    viewInterBtn: 'مشاهده',
-    emptyAgentMsg: 'کارشناسی یافت نشد',
-    newAgentTitle: 'ثبت کارشناس',
-    agentPosPlaceholder: 'مثال: کارشناس ارشد',
-    agentSavedToast: 'کارشناس ثبت شد',
-    editCustomerTitle: function(name) { return 'ویرایش مشتری: ' + name; },
-    customerUpdatedToast: 'مشتری بهروزرسانی شد',
-    newCustomerTitle: 'ثبت مشتری',
-    customerSavedToast: 'مشتری ثبت شد',
-    selectAgentPlaceholder: '— کارشناسی نیست —',
-    reportSelectPlaceholder: 'انتخاب کارشناس...',
-    dateCol: 'تاریخ',
-    scoreCol: 'امتیاز',
-    levelCol: 'سطح',
-    statusCol: 'وضعیت',
-    coachingThemePlaceholder: 'مثلاً احوالپرسی آغازین',
-    behaviorGapPlaceholder: 'مثلاً عدم احوالپرسی با مشتری',
-    customerImpactPlaceholder: 'مثلاً کاهش رضایت',
-    requiredAgentError: 'کارشناس الزامی است',
-    requiredSubjectTranscriptError: 'موضوع و متن الزامی است',
-    manualKpiOption: 'دستی (امتیاز توسط ارزیاب)',
-    autoScoreResultSaved: function(score, level) { return `امتیاز ${score.toFixed(1)} (${level}) ذخیره شد`; },
-    kpiAgentsLabel: 'کارشناسان',
-    kpiCustomersLabel: 'مشتریان',
-    kpiInteractionsLabel: 'تعاملات',
-    kpiCoverageLabel: 'پوشش ارزیابی',
-    kpiAvgScoreLabel: 'میانگین کیفیت',
-    kpiOpenIssuesLabel: 'ایرادات باز',
-    kpiQualityGradeLabel: 'گرید کیفیت',
-    kpiAvgScoreText: 'میانگین امتیاز',
-    colDate: 'تاریخ',
-    colAgent: 'کارشناس',
-    colCustomer: 'مشتری',
-    colChannel: 'کانال',
-    colSubject: 'موضوع',
-    colScore: 'امتیاز',
-    colActions: 'عملیات',
-    exportCsvHeaders: ['شناسه','تاریخ','کارشناس','مشتری','کانال','موضوع','امتیاز','سطح','بحرانی','یادداشت'],
-    viewInterBtn: 'مشاهده',
-    emptyAgentMsg: 'کارشناسی یافت نشد',
-    newAgentTitle: 'ثبت کارشناس',
-    agentPosPlaceholder: 'مثال: کارشناس ارشد',
-    agentSavedToast: 'کارشناس ثبت شد',
-    editCustomerTitle: (name) => 'ویرایش مشتری: ' + name,
-    customerUpdatedToast: 'مشتری بهروزرسانی شد',
-    newCustomerTitle: 'ثبت مشتری',
-    customerSavedToast: 'مشتری ثبت شد',
-    selectAgentPlaceholder: '— کارشناسی نیست —',
-    reportSelectPlaceholder: 'انتخاب کارشناس...',
-    dateCol: 'تاریخ',
-    scoreCol: 'امتیاز',
-    levelCol: 'سطح',
-    statusCol: 'وضعیت',
-    coachingThemePlaceholder: 'مثلاً احوالپرسی آغازین',
-    behaviorGapPlaceholder: 'مثلاً عدم احوالپرسی با مشتری',
-    customerImpactPlaceholder: 'مثلاً کاهش رضایت',
-    requiredAgentError: 'کارشناس الزامی است',
-    requiredSubjectTranscriptError: 'موضوع و متن الزامی است',
-    manualKpiOption: 'دستی (امتیاز توسط ارزیاب)',
-    autoScoreResultSaved: (score, level) => `امتیاز ${score.toFixed(1)} (${level}) ذخیره شد`,
-    transcriptPlaceholder: 'مثال: سلام. مشتری با عصبانیت شکایت کرد که ...',
-    colSessionName: 'نام جلسه',
-    colStandard: 'استاندارد',
-    colSamples: 'نمونهها',
-    colAgreement: 'توافق',
-    colDeadline: 'مهلت',
-    colName: 'نام',
-    colDepartment: 'واحد',
-    colPosition: 'سمت',
-    kpisLoadedToast: (n) => n + ' KPIs loaded',
-    coachLoadedToast: 'Error loading coaching plans:',
-    calLoadedToast: 'Error loading calibration:',
-    coachLoadLabel: 'Loading coaching plans...',
-    calLoadLabel: 'Loading calibration...',
-    calSessionLoadLabel: 'Loading session...',
-    createCalLabel: 'Creating session...',
-    submitScoresLabel: 'Submitting scores...',
-    createCoachLabel: 'Creating plan...',
-    loadingAllLabel: 'Loading...',
-    enteringLoginLabel: 'Logging in...',
+    allInteractionsScored: 'All interactions are scored. Excellent!',
+    emptyScoreTable: 'Not yet scored',
+    seedDefaultKpisBtn: 'Load 7 Default KPIs',
     kpiAgentsLabel: 'Agents',
     kpiCustomersLabel: 'Customers',
     kpiInteractionsLabel: 'Interactions',
     kpiCoverageLabel: 'Assessment Coverage',
-    kpiAvgScoreLabel: 'Avg Quality Score',
+    kpiAvgScoreLabel: 'Avg Quality',
     kpiOpenIssuesLabel: 'Open Issues',
     kpiQualityGradeLabel: 'Quality Grade',
     kpiAvgScoreText: 'Average Score',
@@ -989,240 +662,39 @@ const I18N = {
     viewInterBtn: 'View',
     emptyAgentMsg: 'No agents found',
     newAgentTitle: 'Register Agent',
-    agentPosPlaceholder: 'e.g. Senior Agent',
+    agentPosPlaceholder: 'e.g., Senior Agent',
     agentSavedToast: 'Agent registered',
     editCustomerTitle: function(name) { return 'Edit Customer: ' + name; },
     customerUpdatedToast: 'Customer updated',
-    newCustomerTitle: 'Add Customer',
-    customerSavedToast: 'Customer saved',
+    newCustomerTitle: 'Register Customer',
+    customerSavedToast: 'Customer registered',
     selectAgentPlaceholder: '— No agent —',
     reportSelectPlaceholder: 'Select agent...',
     dateCol: 'Date',
     scoreCol: 'Score',
     levelCol: 'Level',
     statusCol: 'Status',
-    coachingThemePlaceholder: 'e.g. Initial greeting',
-    behaviorGapPlaceholder: 'e.g. No greeting to customer',
-    customerImpactPlaceholder: 'e.g. Reduced satisfaction',
+    coachingThemePlaceholder: 'e.g., Initial greeting',
+    behaviorGapPlaceholder: 'e.g., Not greeting customer',
+    customerImpactPlaceholder: 'e.g., Decreased satisfaction',
     requiredAgentError: 'Agent is required',
     requiredSubjectTranscriptError: 'Subject and transcript are required',
-    manualKpiOption: 'Manual (scored by evaluator)',
-    autoScoreResultSaved: function(score, level) { return `Score ${score.toFixed(1)} (${level}) saved`; },
-    kpiAgentsLabel: 'Agents',
-    kpiCustomersLabel: 'Customers',
-    kpiInteractionsLabel: 'Interactions',
-    kpiCoverageLabel: 'Assessment Coverage',
-    kpiAvgScoreLabel: 'Avg Quality Score',
-    kpiOpenIssuesLabel: 'Open Issues',
-    kpiQualityGradeLabel: 'Quality Grade',
-    kpiAvgScoreText: 'Average Score',
-    colDate: 'Date',
-    colAgent: 'Agent',
-    colCustomer: 'Customer',
-    colChannel: 'Channel',
-    colSubject: 'Subject',
-    colScore: 'Score',
-    colActions: 'Actions',
-    exportCsvHeaders: ['ID','Date','Agent','Customer','Channel','Subject','Score','Level','Critical','Notes'],
-    viewInterBtn: 'View',
-    emptyAgentMsg: 'No agents found',
-    newAgentTitle: 'Register Agent',
-    agentPosPlaceholder: 'e.g. Senior Agent',
-    agentSavedToast: 'Agent registered',
-    editCustomerTitle: (name) => 'Edit Customer: ' + name,
-    customerUpdatedToast: 'Customer updated',
-    newCustomerTitle: 'Add Customer',
-    customerSavedToast: 'Customer saved',
-    selectAgentPlaceholder: '-- No agent --',
-    reportSelectPlaceholder: 'Select agent...',
-    dateCol: 'Date',
-    scoreCol: 'Score',
-    levelCol: 'Level',
-    statusCol: 'Status',
-    coachingThemePlaceholder: 'e.g. Initial greeting',
-    behaviorGapPlaceholder: 'e.g. No greeting to customer',
-    customerImpactPlaceholder: 'e.g. Reduced satisfaction',
-    requiredAgentError: 'Agent is required',
-    requiredSubjectTranscriptError: 'Subject and transcript are required',
-    manualKpiOption: 'Manual (scored by evaluator)',
-    autoScoreResultSaved: (score, level) => `Score ${score.toFixed(1)} (${level}) saved`,
-    transcriptPlaceholder: 'e.g. Hello. The customer complained angrily about...',
+    manualKpiOption: 'Manual (Evaluator determines score)',
+    autoScoreResultSaved: function(score, level) { return 'Score ' + score.toFixed(1) + ' (' + level + ') saved'; },
+    transcriptPlaceholder: 'Example: Hello. Customer called angrily complaining about...',
     colSessionName: 'Session Name',
-    colStandard: 'Rubric',
+    colStandard: 'Standard',
     colSamples: 'Samples',
     colAgreement: 'Agreement',
-    colDeadline: 'Due',
+    colDeadline: 'Deadline',
     colName: 'Name',
-    colDepartment: 'Department',
-    colPosition: 'Position',
-    calStatusMap: {'draft': 'Draft', 'scoring': 'Scoring', 'in_session': 'In Session', 'completed': 'Completed', 'cancelled': 'Cancelled'},
-    coachStatusMap: {'draft': 'Draft', 'pending_acknowledgement': 'Pending Acknowledgement', 'acknowledged': 'Acknowledged', 'in_progress': 'In Progress', 'verified': 'Verified with Follow-up', 'closed': 'Closed', 'escalated': 'Escalated'},
-
-    // Detail strings
-    criticalFailLabel: 'Critical Failure',
-    evaluatorLabel: 'Evaluator',
-    noKpiDefined: 'No KPIs defined',
-    criticalFailNote: 'Critical failure (if score < 60, the whole interaction fails)',    isOpenStatus: 'Open',
-    isClosedStatus: 'Closed',
-    isActiveAgent: 'Active',
-    isInactiveAgent: 'Inactive',
-    csvDownloadedToast: 'CSV file downloaded',
-    yesText: 'Yes',
-    noText: 'No',
-        // Priority pill labels
-    priorityHigh: 'High',
-    priorityMedium: 'Medium',
-    priorityLow: 'Low',
-    priorityLabel: 'Priority',
     
-    // Severity pill labels
-    severityCritical: 'Critical',
-    severityHigh: 'High',
-    severityMedium: 'Medium',
-    severityLow: 'Low',
-    
-    // Customer risk labels
-    riskHigh: 'High Risk',
-    riskHighSub: 'Immediate contact needed',
-    riskMed: 'Medium Risk',
-    riskMedSub: 'Follow-up required',
-    riskLow: 'Low Risk',
-    riskLowSub: 'Normal monitoring',
-    totalCustomersLabel: 'Total Customers',
-    withRiskScoreLabel: 'With Risk Score',
-    noDataAvailable: 'No data available',
-    moreLabel: 'more',
-    
-    // Chart labels
-    avgQualityScore: 'Average Quality Score',
-    healthyLabel: 'Healthy (≥80)',
-    needImproveLabel: 'Needs Improvement (60-80)',
-    criticalLabel: 'Critical (<60)',
-    noRecordLabel: 'No records',
-    customPageSize: 'Custom...',
-    pageSizePlaceholder: 'count',
-    paginationInfo: function(start, end, total, page, totalPages) { 
-        return `Showing <b>${start}–${end}</b> of <b>${total}</b> records (page ${page} of ${totalPages})`; 
-    },
-    firstPage: '« First',
-    prevPage: '‹ Prev',
-    nextPage: 'Next ›',
-    lastPage: 'Last »',
-    pageSizeLabel: 'Items per page:',
-    pageSizePrompt: 'Enter page size (1-1000):',
-    allAgentsLabel: 'All Agents',
-    autoScoreProgress: function(count) { return `Auto-scoring ${count} KPIs...`; },
-    interactionDetailTitle: 'Interaction Details',
-    transcriptLabel: 'Transcript:',
-    criticalFailLabel: 'Critical Failure',
-    evaluatorNote: 'Evaluator Notes (optional)',
-    notesPlaceholder: 'Your additional notes',
-    saveToDashboard: 'Save to Dashboard',
-    cancelBtn: 'Cancel',
-    saveBtn: 'Save',
-    noActiveKpiError: 'No active KPIs',
-    allScoredMsg: 'All interactions scored. Great job!',
-    expertCustomerChannel: function(agent, customer, channel) { 
-        return `Agent: ${agent || '-'} | Customer: ${customer || '-'} | Channel: ${channel}`; 
-    },
-    modalCloseBtn: 'Close',
-    editUserLabel: 'Edit Password / Role',
-    deleteBtn: 'Delete',
-    cannotDeleteSelf: 'Cannot delete yourself',
-    confirmDelete: function(username) { return `Delete user "${username}"?`; },
-    userDeletedToast: 'User deleted',
-    newUserTitle: 'Create New User',
-    usernameLabel: 'Username (min 3 chars)',
-    passwordLabel: 'Password (min 4 chars)',
-    adminAccessLabel: 'System Admin Access',
-    createBtn: 'Create',
-    usernameRequired: 'Username is required',
-    userCreatedToast: 'User created',
-    editUserTitle: function(username) { return `Edit User: ${username}`; },
-    newPasswordLabel: 'New Password (leave blank to keep)',
-    updatedToast: 'User updated',
-    onlyAdminAccessible: 'Only system administrators have access',
-    // Product types
-    productBank: 'Bank',
-    productInsurance: 'Insurance',
-    productInvestment: 'Investment',
-    productLoan: 'Loan',
-    
-    // Buttons
-    editBtn: 'Edit',
-    deleteBtn: 'Delete',
-    saveBtn: 'Save',
-    cancelBtn: 'Cancel',
-    closeBtn: 'Close',
-    reportBtn: 'Report',
-    
-    // Messages
-    emptyCustomerMsg: 'No customers found',
-    customerDeletedToast: 'Deleted',
-    confirmDelete: function(name) { return `Delete ${name}?`; },
-    isActiveAgent: 'Active',
-    isInactiveAgent: 'Inactive',
-    
-    // Risk levels
-    riskHigh: 'High Risk',
-    riskMed: 'Medium Risk',
-    riskLow: 'Low Risk',
-    riskHighSub: 'Immediate contact needed',
-    riskMedSub: 'Follow-up required',
-    riskLowSub: 'Normal monitoring',
-    totalCustomersLabel: 'Total Customers',
-    withRiskScoreLabel: 'With Risk Score',
-    noDataAvailable: 'No data available',
-    moreLabel: 'more',
     // More UI strings
-    pageInfoLabel: function(s,e,t,p,tp) { return `نمایش <b>${s}–${e}</b> از <b>${t}</b> رکورد (صفحه ${p} از ${tp})`; },
-    pageSizeLabel: 'تعداد در صفحه:',
-    pageSizePrompt: 'تعداد در صفحه را وارد کنید (۱ تا ۱۰۰۰):',
-    allAgentsOpt: 'همه کارشناسان',
-    autoScoreProgress: function(n) { return `در حال اندازهگیری خودکار ${n} KPI...`; },
-    interactionDetailTitle: 'جزئیات تعامل',
-    transcriptLabel: 'متن مکالمه:',
-    criticalFailLabel2: 'شکست بحرانی',
-    evaluatorNote: 'یادداشت ارزیاب (اختیاری)',
-    notesPlaceholder: 'نکات تکمیلی شما',
-    saveToDashboardBtn: 'ذخیره در داشبورد',
-    cancelBtn2: 'انصراف',
-    noActiveKpi: 'هیچ KPI فعالی',
-    kpiMsg: 'ابتدا KPI تعریف کنید یا پیشفرضها را بارگذاری کنید',
-    expertCustomerChannel: function(a,c,ch) { return `کارشناس: ${a || '-'} | مشتری: ${c || '-'} | کانال: ${ch}`; },
-    riskLabel: 'ریسک',
-    riskFactorsLabel: 'دلایل ریسک:',
-    suggestedActionLabel: 'اقدام پیشنهادی:',
-    autoScoreBtn2: 'ارزیابی خودکار',
-    activeLabel: 'فعال',
-    inactiveLabel: 'غیرفعال',
-    reportBtn2: 'گزارش',
-    toggleToast: function(active) { return active ? 'فعال شد' : 'غیرفعال شد'; },
-    agentNameLabel: 'نام و نام خانوادگی',
-    agentDeptLabel: 'واحد',
-    agentPosLabel: 'سمت',
-    agentSavedToast: 'کارشناس ثبت شد',
-    editCustLabel: 'ویرایش',
-    deleteCustLabel: 'حذف',
-    segmentLabel: 'سطح',
-    segmentNormal: 'عادی',
-    segmentImportant: 'مهم',
-    notesFieldLabel: 'یادداشت',
-    customerUpdatedToast: 'مشتری بهroزرسانی شد',
-    newCustomerName: 'نام',
-    newCustomerPhone: 'تلفن',
-    newCustomerProduct: 'محصول',
-    newCustomerSeg: 'بخش',
-    normalOpt: 'عادی',
-    vipOpt: 'VIP',
-    corpOpt: 'شرکتی',
-    customerCreatedToast: 'مشتری ثبت شد',
-    // More UI strings
-    pageInfoLabel: (s,e,t,p,tp) => `Showing <b>${s}–${e}</b> of <b>${t}</b> records (page ${p} of ${tp})`,
+    pageInfoLabel: function(s,e,t,p,tp) { return 'Showing <b>' + s + '–' + e + '</b> of <b>' + t + '</b> records (page ' + p + ' of ' + tp + ')'; },
     pageSizeLabel: 'Items per page:',
     pageSizePrompt: 'Enter page size (1-1000):',
     allAgentsOpt: 'All Agents',
-    autoScoreProgress: (n) => `Auto-scoring ${n} KPIs...`,
+    autoScoreProgress: function(n) { return 'Auto-scoring ' + n + ' KPIs...'; },
     interactionDetailTitle: 'Interaction Details',
     transcriptLabel: 'Transcript:',
     criticalFailLabel2: 'Critical Failure',
@@ -1232,7 +704,7 @@ const I18N = {
     cancelBtn2: 'Cancel',
     noActiveKpi: 'No active KPIs',
     kpiMsg: 'Define KPIs first or load defaults',
-    expertCustomerChannel: (a,c,ch) => `Agent: ${a || '-'} | Customer: ${c || '-'} | Channel: ${ch}`,
+    expertCustomerChannel: function(a,c,ch) { return 'Agent: ' + (a || '-') + ' | Customer: ' + (c || '-') + ' | Channel: ' + ch; },
     riskLabel: 'Risk',
     riskFactorsLabel: 'Risk Factors:',
     suggestedActionLabel: 'Suggested Action:',
@@ -1240,221 +712,101 @@ const I18N = {
     activeLabel: 'Active',
     inactiveLabel: 'Inactive',
     reportBtn2: 'Report',
-    toggleToast: (active) => active ? 'Activated' : 'Deactivated',
+    toggleToast: function(active) { return active ? 'Activated' : 'Deactivated'; },
     agentNameLabel: 'Full Name',
     agentDeptLabel: 'Department',
     agentPosLabel: 'Position',
-    agentSavedToast: 'Agent registered',
     editCustLabel: 'Edit',
     deleteCustLabel: 'Delete',
-    segmentLabel: 'Level',
+    segmentLabel: 'Segment',
     segmentNormal: 'Normal',
     segmentImportant: 'Important',
     notesFieldLabel: 'Notes',
-    customerUpdatedToast: 'Customer updated',
-    newCustomerName: 'Name',
-    newCustomerPhone: 'Phone',
-    newCustomerProduct: 'Product',
-    newCustomerSeg: 'Segment',
     normalOpt: 'Normal',
     vipOpt: 'VIP',
     corpOpt: 'Corporate',
-    customerCreatedToast: 'Customer saved',
-    // Score pills
+    customerCreatedToast: 'Customer registered',
+    
+    // New keys for 2026-09-09 fixes
+    scoresSavedToast: 'Scores saved',
+    issueClosedToast: 'Issue closed',
+    interactionSavedToast: 'Interaction registered',
+    userCreatedToast2: 'User created',
+    userUpdatedToast: 'User updated',
+    userDeletedToast2: 'User deleted',
+    calSessionLoadLabel: 'Loading session...',
+    calLoadedToast: 'Error loading calibration:',
+    coachLoadLabel: 'Loading coaching plans...',
+    coachLoadedToast: 'Error loading coaching plans:',
+    toastLoadDashboard2: 'Calculating KPIs and charts...',
+    toastErrorDashboard2: 'Error loading dashboard:',
+    loadingAllLabel: 'Loading...',
+    enteringLoginLabel: 'Logging in...',
+    csvDownloadedToast: 'CSV downloaded',
+    invalidResponse: 'Invalid server response',
     scoreNotEvaluated: 'Not Evaluated',
-    emptyTable: 'No data available',
-
-    // Buttons
+    criticalFailLabel: 'Critical Failure',
+    criticalFailNote: 'Critical Failure Note',
+    noKpiDefined: 'No KPI defined',
+    seedDefaultKpisBtn2: 'Load 7 Default KPIs',
+    customPageSize: 'Custom Page Size',
     editBtn: 'Edit',
     deleteBtn: 'Delete',
-    saveBtn: 'Save',
     cancelBtn: 'Cancel',
-    closeBtn: 'Close',
-    reportBtn: 'Report',
-    
-    // Messages
+    saveBtn: 'Save',
+    confirmDelete: 'Are you sure?',
     emptyCustomerMsg: 'No customers found',
-    customerDeletedToast: 'Deleted',
-    confirmDelete: (name) => `Delete ${name}?`,
-    isActiveAgent: 'Active',
-    isInactiveAgent: 'Inactive',
-    
-    // Product types
-    productBank: 'Bank',
+    coa: 'coaching',
+    cal: 'calibration',
+    reportSelect: 'report',
+    noRecordLabel: 'No record found',
+    severity: 'severity',
+    status: 'status',
+    yesText: 'yes',
+    noText: 'no',
+    moreLabel: 'more',
+    priorityLabel: 'priority',
+    priorityHigh: 'high',
+    priorityMedium: 'medium',
+    priorityLow: 'low',
+    isClosedStatus: 'closed',
+    isOpenStatus: 'open',
+    isActiveAgent: 'active',
+    isInactiveAgent: 'inactive',
+    needImproveLabel: 'needs improvement',
+    healthyLabel: 'healthy',
+    evaluatorLabel: 'evaluator',
+    kpisLoadedToast: 'KPIs loaded',
+    createCalLabel: 'Creating session...',
+    createCoachLabel: 'Creating plan...',
+    submitScoresLabel: 'Submitting scores...',
+    deleteCustConfirm: 'Are you sure you want to delete this customer?',
+    cannotDeleteSelf: 'You cannot delete yourself',
+    kpiWeightError: 'Weight must be 0-100',
+    calcScoreLabel: 'Calculating score...',
+    coaSaveLabel: 'Saving plan...',
+    saveToDashboardBtn2: 'Save to Dashboard',
+    productBank: 'Banking',
     productInsurance: 'Insurance',
     productInvestment: 'Investment',
     productLoan: 'Loan',
-    // Error messages
-    invalidResponse: 'Invalid response',
-
-    // RTL/LTR
-    dir: 'ltr',
-    lang: 'en',
-  }
+    coaStatusMap: { 'draft': 'Draft', 'pending_acknowledgement': 'Pending Review', 'acknowledged': 'Approved', 'in_progress': 'In Progress', 'verified': 'Verified with Follow-up', 'closed': 'Closed', 'escalated': 'Escalated/Referred' },
+    calStatusMap: { 'draft': 'Draft', 'scoring': 'Scoring', 'in_session': 'Active Session', 'completed': 'Completed', 'cancelled': 'Cancelled' },
+  },
 };
 
-// Current language state
-let currentLang = localStorage.getItem('crm_qi_lang') || 'fa';
-
-/**
- * Get translated string
- * @param {string} key - Translation key
- * @param {...*} args - Arguments for function values
- * @returns {string} Translated text
- */
 function t(key, ...args) {
   const dict = I18N[currentLang] || I18N.fa;
   let value = dict[key];
-  if (typeof value === 'function') {
-    value = value(...args);
-  }
-  return value || key;
+  if (value === undefined) return key;
+  if (typeof value === 'function') value = value(...args);
+  return value;
 }
 
-/**
- * Apply language to DOM
- */
-function applyLanguage(lang) {
-  currentLang = lang;
-  localStorage.setItem('crm_qi_lang', lang);
-
-  const dict = I18N[lang] || I18N.fa;
-  const html = document.documentElement;
-  html.setAttribute('lang', dict.lang);
-  html.setAttribute('dir', dict.dir);
-  html.classList.toggle('rtl', dict.dir === 'rtl');
-  html.classList.toggle('ltr', dict.dir === 'ltr');
-
-  // Update page title
-  document.title = dict.pageTitle;
-
-  // Update nav items
-  const navMap = {
-    'dashboard': 'navDashboard',
-    'interactions': 'navInteractions',
-    'agents': 'navAgents',
-    'customers': 'navCustomers',
-    'risk': 'navRisk',
-    'recommendations': 'navRecommendations',
-    'issues': 'navIssues',
-    'coaching': 'navCoaching',
-    'calibration': 'navCalibration',
-    'rubrics': 'navRubrics',
-    'report': 'navReport',
-    'users': 'navUsers',
-    'audit': 'navAudit'
-  };
-
-  Object.entries(navMap).forEach(([tab, key]) => {
-    const el = document.querySelector(`[data-tab="${tab}"]`);
-    if (el) {
-      const svg = el.querySelector('svg');
-      if (svg) {
-        el.innerHTML = '';
-        el.appendChild(svg.cloneNode(true));
-        el.appendChild(document.createTextNode(' ' + dict[key]));
-      }
-    }
-  });
-
-  // Update static text elements with data-i18n attribute
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    if (dict[key]) {
-      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-        el.placeholder = dict[key];
-      } else {
-        el.textContent = dict[key];
-      }
-    }
-  });
-
-  // Update search placeholder
-  const searchInput = document.getElementById('fSearch');
-  if (searchInput) {
-    searchInput.placeholder = dict.searchPlaceholder;
+// Initialize language on page load
+(function() {
+  const savedLang = localStorage.getItem('crm_qi_lang');
+  if (savedLang && I18N[savedLang]) {
+    currentLang = savedLang;
   }
-
-  // Update channel filter options
-  const channelSelect = document.getElementById('fChannel');
-  if (channelSelect) {
-    const currentVal = channelSelect.value;
-    channelSelect.innerHTML = `<option value="">${dict.allChannels}</option>`;
-    dict.channelOptions.forEach(opt => {
-      channelSelect.innerHTML += `<option value="${opt}">${opt}</option>`;
-    });
-    channelSelect.value = currentVal;
-  }
-
-  // Update status filter options
-  const statusSelect = document.getElementById('iStatus');
-  if (statusSelect) {
-    const currentVal = statusSelect.value;
-    statusSelect.innerHTML = `<option value="">${dict.allStatuses}</option>`;
-    dict.statusOptions.forEach(opt => {
-      statusSelect.innerHTML += `<option>${opt}</option>`;
-    });
-    statusSelect.value = currentVal;
-  }
-
-  // Update severity filter options
-  const severitySelect = document.getElementById('iSeverity');
-  if (severitySelect) {
-    const currentVal = severitySelect.value;
-    severitySelect.innerHTML = `<option value="">${dict.allSeverities}</option>`;
-    dict.severityOptions.forEach(opt => {
-      severitySelect.innerHTML += `<option>${opt}</option>`;
-    });
-    severitySelect.value = currentVal;
-  }
-
-  // Update coaching status filter
-  const cStatusSelect = document.getElementById('cStatus');
-  if (cStatusSelect) {
-    const currentVal = cStatusSelect.value;
-    cStatusSelect.innerHTML = `<option value="">${dict.allStatuses}</option>`;
-    dict.coachingStatusOptions.forEach(opt => {
-      cStatusSelect.innerHTML += `<option value="${opt}">${opt}</option>`;
-    });
-    cStatusSelect.value = currentVal;
-  }
-
-  // Update calibration status filter
-  const calStatusSelect = document.getElementById('calStatus');
-  if (calStatusSelect) {
-    const currentVal = calStatusSelect.value;
-    calStatusSelect.innerHTML = `<option value="">${dict.allStatuses}</option>`;
-    dict.calibrationStatusOptions.forEach(opt => {
-      calStatusSelect.innerHTML += `<option value="${opt}">${opt}</option>`;
-    });
-    calStatusSelect.value = currentVal;
-  }
-
-  // Update language switcher button text
-  const langBtn = document.getElementById('langBtn');
-  if (langBtn) {
-    langBtn.textContent = lang === 'fa' ? 'EN' : 'فارسی';
-  }
-
-  // Update mobile nav items
-  document.querySelectorAll('.mobile-nav-item').forEach(item => {
-    const tab = item.dataset.tab;
-    if (navMap[tab] && dict[navMap[tab]]) {
-      const svg = item.querySelector('svg');
-      item.innerHTML = '';
-      item.appendChild(svg.cloneNode(true));
-      item.appendChild(document.createTextNode(' ' + dict[navMap[tab]]));
-    }
-  });
-
-  // Re-render current page to update dynamic content
-  const activeTab = document.querySelector('.nav-item.active')?.dataset.tab;
-  if (activeTab) {
-    window.switchTab?.(activeTab);
-  }
-}
-
-// Initialize language on load
-document.addEventListener('DOMContentLoaded', () => {
-  applyLanguage(currentLang);
-});
+})();

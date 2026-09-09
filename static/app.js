@@ -8,6 +8,8 @@ const TOKEN_KEY = 'crm_qi_token';
 const USER_KEY = 'crm_qi_user';
 const CACHE_KEY = 'crm_qi_cache_v1';
 const CACHE_TTL = 60_000;
+const LANG_KEY = 'crm_qi_lang';
+let currentLang = localStorage.getItem(LANG_KEY) || 'fa';
 
 const State = {
   token: localStorage.getItem(TOKEN_KEY) || null,
@@ -390,25 +392,25 @@ function renderCustomerRisk() {
 
 // ============ Language Switcher ============
 function toggleLanguage() {
+  // Toggle and apply - show OPPOSITE language button
   currentLang = currentLang === 'fa' ? 'en' : 'fa';
   applyLanguage(currentLang);
 }
 
 function applyLanguage(lang) {
-  localStorage.setItem('crm_qi_lang', lang);
+  localStorage.setItem(LANG_KEY, lang);
   document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr';
   document.documentElement.lang = lang;
-  // Update lang buttons
+  // Update lang buttons - show OPPOSITE so user clicks to SWITCH
   const btns = [$('#langBtn'), $('#langBtnLogin')].filter(Boolean);
-  btns.forEach(btn => btn.textContent = lang === 'fa' ? '🇮🇷 FA' : '🇬🇧 EN');
+  btns.forEach(btn => btn.textContent = lang === 'fa' ? '🇬🇧 EN' : '🇮🇷 FA');
   // Update all data-i18n elements
   $$('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
     if (I18N[lang][key] !== undefined) el.textContent = I18N[lang][key];
   });
   // Update page title
-  const title = I18N[lang]['pageTitle'] || 'Quality Inspector';
-  document.title = title;
+  document.title = I18N[lang]['pageTitle'] || 'Quality Inspector';
 }
 
 function switchTab(tab) {
