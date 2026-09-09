@@ -376,11 +376,11 @@ Before exposing this app to the public internet:
 
 - [x] **Customer Risk Score** — auto-rank customers by churn probability based on scoring gaps, open issues, and interaction recency
 - [x] **Audit Log + Compliance Trail** — full audit log tracking all critical write operations (scores, issues, coaching plans, calibration sessions); admin-only tab with Persian action labels, pagination, and filter-by-action dropdown. Logged actions include: score_interaction, create_issue, resolve_issue, acknowledge_coaching, close_coaching, submit_calibration_score
+- [x] **Mobile-responsive UI** — full slide-out navigation panel with all 12 tabs, card-style table layout on small screens, mobile topbar with menu button and user badge, SVG nav icons for all menu items, sidebar scrollbar hide, and desktop footer fix
+- [x] **File logging** — structured tracing logs written to `crm-quality-inspector.log` with configurable log level via `LOG_LEVEL` env var (info/debug/warn/error)
 - [ ] AI-assisted scoring using LLM (suggest scores based on transcript)
 - [ ] Real-time sentiment analysis (WebSocket stream)
 - [ ] Multi-tenant support (organization isolation)
-- [ ] Audit log + compliance trail
-- [x] **Mobile-responsive UI** — full slide-out navigation panel with all 12 tabs, card-style table layout on small screens, mobile topbar with menu button and user badge
 - [ ] Integration with telephony (Asterisk AMI, FreeSWITCH)
 - [ ] Persian speech-to-text (Vosk integration)
 - [ ] Grafana metrics export
