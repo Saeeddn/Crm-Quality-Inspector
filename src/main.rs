@@ -16,9 +16,19 @@ async fn main() {
     eprintln!("[boot] dotenv loaded");
     let _ = std::io::Write::flush(&mut std::io::stderr());
 
-    // Initialize tracing — write to stderr, line-buffered so it shows up in docker logs
+    // Initialize tracing — write to stderr, line-buffered so we see it in Hermes terminal.
+    // Log level controlled by LOG_LEVEL env var: trace, debug, info, warn, error (default: info).
+    let log_level = std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
+    let env_filter = tracing_subscriber::EnvFilter::try_new(format!("crm_qi={}", log_level))
+        .or_else(|_| tracing_subscriber::EnvFilter::from_default_env())
+        .unwrap();
     tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer().with_target(false).with_writer(std::io::stderr))
+        .with(tracing_subscriber::fmt::layer()
+            .with_target(false)
+            .with_writer(std::io::stderr)
+            .with_ansi(cfg!(not(test)))
+        )
+        .with(env_filter)
         .init();
     eprintln!("[boot] tracing initialized");
     let _ = std::io::Write::flush(&mut std::io::stderr());
