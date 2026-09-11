@@ -779,16 +779,16 @@ async function openAutoScore(id) {
   const agent = State.agents.find(a => a.id === interaction.agent_id);
 
   // First show a preview/measure
-  openModal(t('autoScoreTitle')), `
+  openModal(t('autoScoreTitle'), `
     <div style="background:var(--surface-2);padding:12px;border-radius:8px;margin-bottom:14px">
       <b>${esc(interaction.subject)}</b>
       <div style="color:var(--text-muted);font-size:12px;margin-top:4px">${esc(interaction.transcript.slice(0, 300))}${interaction.transcript.length > 300 ? '…' : ''}</div>
     </div>
     <div style="text-align:center;padding:20px">
       <div class="spinner" style="display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin 1s linear infinite"></div>
-      <p style="color:var(--text-muted);margin-top:12px">${t('autoScoreProgress')(State.kpis.filter(k=>k.active).length)}</p>
+      <p style="color:var(--text-muted);margin-top:12px">${t('autoScoreProgress')}</p>
     </div>
-  `;
+  `);
   document.head.insertAdjacentHTML('beforeend', '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>');
 
   try {
@@ -829,7 +829,7 @@ async function openAutoScore(id) {
 
       <div class="field" style="margin-top:14px">
         <label>${t('evaluatorNote')}</label>
-        <textarea id="autoScoreNotes" placeholder="${t('notesPlaceholder')})"></textarea>
+        <textarea id="autoScoreNotes" placeholder="${t('notesPlaceholder')}"></textarea>
       </div>
     `, `<button class="btn btn-primary" id="saveAutoScore">${t('saveToDashboardBtn')}</button>
         <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
@@ -1100,7 +1100,7 @@ function openNewInteraction() {
     Promise.all([loadAgents(), loadCustomers()]).then(openNewInteraction);
     return;
   }
-  openModal(t('newInteractionTitle')), `
+  openModal(t('newInteractionTitle'), `
     <div class="field"><label>${t('colAgent')}</label><select id="iAgent">${State.agents.filter(a => a.active).map(a => `<option value="${a.id}">${esc(a.name)} — ${esc(a.department)}</option>`).join('')}</select></div>
     <div class="field"><label>${t('colCustomer')}</label><select id="iCust">${State.customers.map(c => `<option value="${c.id}">${esc(c.name)} — ${esc(c.product_type)}</option>`).join('')}</select></div>
     <div class="field"><label>${t('colChannel')}</label><select id="iCh"><option>${t('channelPhone')}</option><option>${t('channelInperson')}</option><option>${t('channelEmail')}</option><option>${t('channelChat')}</option><option>${t('channelSms')}</option></select></div>
@@ -1112,7 +1112,7 @@ function openNewInteraction() {
     try {
       const sub = $('#iSub').value.trim();
       const tr = $('#iTr').value.trim();
-      if (!sub || !tr) throw new Error(t('requiredSubjectTranscriptError')));
+      if (!sub || !tr) throw new Error(t('requiredSubjectTranscriptError'));
       await api('/interactions', { method: 'POST', body: JSON.stringify({
         agent_id: $('#iAgent').value, customer_id: $('#iCust').value,
         channel: $('#iCh').value, subject: sub, transcript: tr, tags: []
@@ -1199,7 +1199,7 @@ $('#seedKpisBtn')?.addEventListener('click', seedKpis);
 $('#newKpiBtn')?.addEventListener('click', openNewKpi);
 
 function openNewKpi() {
-  openModal(t('newKpiTitle')), `
+  openModal(t('newKpiTitle'), `
   <div class="field"><label>${t('kpiCodeLabel')}</label><input id="kCode" placeholder="${t('kpiCodePlaceholder')}"></div>
   <div class="field"><label>${t('kpiNameLabel')}</label><input id="kName" placeholder="${t('kpiNamePlaceholder')}"></div>
   <div class="field"><label>${t('kpiKindLabel')}</label>
@@ -1227,8 +1227,8 @@ function openNewKpi() {
     const code = $('#kCode').value.trim();
     const name = $('#kName').value.trim();
     const weight = parseFloat($('#kWeight').value);
-    if (!code || !name) { toast(t('kpiCodeNameRequired')), 'error'); return; }
-    if (isNaN(weight) || weight < 0 || weight > 100) { toast(t('kpiWeightError')), 'error'); return; }
+    if (!code || !name) { toast(t('kpiCodeNameRequired'), 'error'); return; }
+    if (isNaN(weight) || weight < 0 || weight > 100) { toast(t('kpiWeightError'), 'error'); return; }
     const th = $('#kThreshold').value.trim();
     const req = {
       code, name,
@@ -1266,7 +1266,7 @@ function renderIssues() {
       <td>${statusPill(x.status)}</td>
       <td>${x.due_at ? fmtDate(x.due_at) : '-'}</td>
       <td class="row-actions" data-label='${t("colActions")}'>
-        ${x.status === t('isOpenStatus') ? `<button class="btn btn-sm btn-success" data-resolve-issue="${x.id}">${t('capaBtn')}</button>` : '<span style="color:var(--text-muted);font-size:12px">' + ${t('isClosedStatus')}) + '</span>'}
+        ${x.status === t('isOpenStatus') ? `<button class="btn btn-sm btn-success" data-resolve-issue="${x.id}">${t('capaBtn')}</button>` : `<span style="color:var(--text-muted);font-size:12px">${t('isClosedStatus')}</span>`}
       </td>
     </tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">${t('noIssuesFound')}</td></tr>`;
@@ -1279,7 +1279,7 @@ $('#iStatus')?.addEventListener('change', renderIssues);
 $('#iSeverity')?.addEventListener('change', renderIssues);
 
 function openResolve(id) {
-  openModal(t('capaModalTitle')), `
+  openModal(t('capaModalTitle'), `
     <div class="field"><label>${t('rootCauseLabel')}</label><textarea id="capRoot" placeholder="${t('rootCausePlaceholder')}"></textarea></div>
     <div class="field"><label>${t('correctiveActionLabel')}</label><textarea id="capAct" placeholder="${t('correctiveActionPlaceholder')}"></textarea></div>
   `, `<button class="btn btn-success" id="saveCapa">${t('saveAndCloseBtn')}</button>
@@ -1329,14 +1329,14 @@ async function renderReport() {
       <div class="card">
         <table class="data-table">
           <thead><tr><th>${t('dateCol')}</th><th>${t('scoreCol')}</th><th>${t('levelCol')}</th><th>${t('statusCol')}</th></tr></thead>
-          <tbody>${(r.scores || []).map(s => `
+          <tbody>${((r.scores || []).map(s => `
             <tr>
               <td>${fmtDate(s.created_at)}</td>
               <td><b>${Number(s.overall_score).toFixed(1)}</b></td>
               <td>${scorePill(s.overall_score, s.critical_fail)}</td>
               <td>${s.critical_fail ? '<span class="pill pill-bad">بحرانی</span>' : '<span class="pill pill-good">عادی</span>'}</td>
             </tr>
-          `).join('') || `<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">${t('notYetScored'))}</td></tr>`}</tbody>
+          `).join('') || `<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">${t('notYetScored')}</td></tr>`)}
         </table>
       </div>
     `;
@@ -1392,12 +1392,12 @@ function renderUsers() {
   tbody.querySelectorAll('[data-edit-user]').forEach(b => b.addEventListener('click', () => openEditUser(b.dataset.editUser)));
   tbody.querySelectorAll('[data-del-user]').forEach(b => b.addEventListener('click', async () => {
     const u = b.dataset.delUser;
-    if (u === State.user?.username) { toast(t('cannotDeleteSelf')), 'error'); return; }
-    if (!confirm(${t('confirmDeleteUser')})(u))) return;
+    if (u === State.user?.username) { toast(t('cannotDeleteSelf'), 'error'); return; }
+    if (!confirm(t('confirmDeleteUser')(u))) return;
     try {
       await api('/users/' + encodeURIComponent(u), { method: 'DELETE' });
       await loadUsers();
-      toast(t('userDeletedToast')));
+      toast(t('userDeletedToast'));
     } catch (e) { toast(e.message, 'error'); }
   }));
 }
@@ -1405,7 +1405,7 @@ function renderUsers() {
 $('#newUserBtn')?.addEventListener('click', () => openNewUser());
 
 function openNewUser() {
-  openModal(t('newUserTitle')), `
+  openModal(t('newUserTitle'), `
     <div class="field"><label>${t('usernameLabel')}</label><input id="uName" autocomplete="off"></div>
     <div class="field"><label>${t('passwordLabel')}</label><input id="uPass" type="password" autocomplete="new-password"></div>
     <div class="field"><label><input type="checkbox" id="uAdmin"> ${t('adminAccessLabel')}</label></div>
@@ -1415,12 +1415,12 @@ function openNewUser() {
     try {
       const username = $('#uName').value.trim();
       const password = $('#uPass').value;
-      if (!username || !password) { toast(t('usernamePasswordRequired')), 'error'); return; }
+      if (!username || !password) { toast(t('usernamePasswordRequired'), 'error'); return; }
       await api('/users', { method: 'POST', body: JSON.stringify({
         username, password, is_admin: $('#uAdmin').checked
       })});
       closeModal(); await loadUsers();
-      toast(t('userCreatedToast')));
+      toast(t('userCreatedToast'));
     } catch (e) { toast(e.message, 'error'); }
   });
 }
@@ -1428,10 +1428,10 @@ function openNewUser() {
 function openEditUser(username) {
   const u = StateUsers.find(x => x.username === username);
   if (!u) return;
-  openModal(`t('editUserTitle')(username)`, `
+  openModal(t('editUserTitle')(username), `
     <div class="field"><label>نام کاربری</label><input value="${esc(username)}" disabled></div>
-    <div class="field"><label>${t('newPasswordLabel'))}</label><input id="uPassNew" type="password" autocomplete="new-password"></div>
-    <div class="field"><label><input type="checkbox" id="uAdmin" ${u.is_admin ? 'checked' : ''}> ${t('adminAccessLabel')})</label></div>
+    <div class="field"><label>${t('newPasswordLabel')}</label><input id="uPassNew" type="password" autocomplete="new-password"></div>
+    <div class="field"><label><input type="checkbox" id="uAdmin" ${u.is_admin ? 'checked' : ''}> ${t('adminAccessLabel')}</label></div>
   `, `<button class="btn btn-primary" id="updateUser">${t('saveBtn')}</button>
       <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
   $('#updateUser').addEventListener('click', async () => {
@@ -1517,14 +1517,14 @@ async function checkConnection() {
     if (j && j.success) {
       el.classList.remove('disconnected');
       const txt = el.querySelector('span:last-child');
-      if (txt) txt.textContent = ${t('connected')});
+      if (txt) txt.textContent = t('connected');
     } else {
       throw new Error('invalid');
     }
   } catch (e) {
     const txt = el.querySelector('span:last-child');
     el.classList.add('disconnected');
-    if (txt) txt.textContent = ${t('disconnected')});
+    if (txt) txt.textContent = t('disconnected');
   }
 }
 checkConnection();
@@ -1539,7 +1539,7 @@ const COACHING_STATUS_PILL = {
 };
 
 function coachingStatusLabel(status) {
-  return ${t('coaStatusMap')})[status] || status;
+  return t('coaStatusMap')[status] || status;
 }
 
 let coachingPage = 1;
@@ -1557,7 +1557,7 @@ async function loadCoaching(force = false) {
   try {
     const params = new URLSearchParams({ offset: (coachingPage - 1) * coachingPageSize, limit: coachingPageSize });
     if (status) params.set(t('status'), status);
-    const data = await withLoading(t('coachLoadLabel')), () => api('/coaching/plans?' + params));
+    const data = await withLoading(t('coachLoadLabel'), () => api('/coaching/plans?' + params));
     State.coachingPlans = data.items || [];
     State.coachingTotal = data.total || State.coachingPlans.length;
     State.coachingTotalPages = Math.max(1, Math.ceil((data.total || 0) / coachingPageSize));
@@ -1565,7 +1565,7 @@ async function loadCoaching(force = false) {
     setupCoachingEvents();
     renderCoaching();
   } catch (e) {
-    toast(${t('coachLoadedToast')}) + e.message, 'error');
+    toast(t('coachLoadedToast') + e.message, 'error');
   }
 }
 
@@ -1600,7 +1600,7 @@ async function openNewCoachingPlan() {
     ? interactions.map(i => `<option value="${esc(i.id)}">${esc(i.id)} — ${esc(i.subject)}</option>`).join('')
     : '<option value="">— تعاملی نیست —</option>';
 
-  openModal(t('newCoachingPlanTitle')), `
+  openModal(t('newCoachingPlanTitle'), `
     <div class="field"><label>${t('colAgent')}</label><select id="cpAgent">${agentOpts}</select></div>
     <div class="field"><label>${t('relatedInteractionLabel')}</label><select id="cpInteraction">${intOpts}</select></div>
     <div class="field"><label>${t('coachingThemeLabel')}</label><input id="cpTheme" placeholder="${t('coachingThemePlaceholder')}"></div>
@@ -1619,10 +1619,10 @@ async function openNewCoachingPlan() {
     try {
       const agentId = $('#cpAgent').value;
       const interactionId = $('#cpInteraction').value;
-      if (!agentId) throw new Error(t('requiredAgentError')));
-      if (!interactionId) throw new Error(t('interactionRequired')));
+      if (!agentId) throw new Error(t('requiredAgentError'));
+      if (!interactionId) throw new Error(t('interactionRequired'));
       const due = $('#cpDue').value;
-      if (!due) throw new Error(t('dueDateRequired')));
+      if (!due) throw new Error(t('dueDateRequired'));
       const body = {
         agent_id: agentId,
         interaction_id: interactionId,
@@ -1636,11 +1636,11 @@ async function openNewCoachingPlan() {
         follow_up_due_at: new Date(due).toISOString(),
         follow_up_review_count: parseInt($('#cpFollowups').value, 10) || 2
       };
-      await withLoading(t('createCoachLabel')), () => api('/coaching/plans', { method: 'POST', body: JSON.stringify(body) }));
+      await withLoading(t('createCoachLabel'), () => api('/coaching/plans', { method: 'POST', body: JSON.stringify(body) }));
       closeModal();
       State.loaded.coaching = false;
       await loadCoaching(true);
-      toast(t('coachingCreatedToast')), 'success');
+      toast(t('coachingCreatedToast'), 'success');
     } catch (e) { toast(e.message, 'error'); }
   });
 }
@@ -1747,7 +1747,7 @@ async function handleCoachingAction(action, planId) {
 }
 
 async function openCoachingReview(planId) {
-  showLoading(t('loadingAllLabel')));
+  showLoading(t('loadingAllLabel'));
   try {
     const data = await api('/coaching/plans/' + planId);
     hideLoading();
@@ -1784,7 +1784,7 @@ const CAL_STATUS_PILL = {
 };
 
 function calStatusLabel(status) {
-  return ${t('calStatusMap')})[status] || status;
+  return t('calStatusMap')[status] || status;
 }
 
 let calPage = 1;
@@ -1796,7 +1796,7 @@ async function loadCalibration(force = false) {
   try {
     const params = new URLSearchParams({ offset: (calPage - 1) * calPageSize, limit: calPageSize });
     if (status) params.set(t('status'), status);
-    const data = await withLoading(t('calLoadLabel')), () => api('/calibration/sessions?' + params));
+    const data = await withLoading(t('calLoadLabel'), () => api('/calibration/sessions?' + params));
     State.calibrationSessions = data.items || [];
     State.calibrationTotal = data.total || State.calibrationSessions.length;
     State.calibrationTotalPages = Math.max(1, Math.ceil((data.total || 0) / calPageSize));
@@ -1804,7 +1804,7 @@ async function loadCalibration(force = false) {
     attachCalibrationEventListeners();
     renderCalibration();
   } catch (e) {
-    toast(${t('calLoadedToast')}) + e.message, 'error');
+    toast(t('calLoadedToast') + e.message, 'error');
   }
 }
 
@@ -1878,17 +1878,17 @@ async function handleCalibrationAction(action, id) {
   try {
     if (action === 'start') {
       await api('/calibration/sessions/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to_status: 'start' }) });
-      toast('جلسه شروع شد (در حال ${t('scoreCol')})دهی)', 'success');
+      toast(`جلسه شروع شد (در حال ${t('scoreCol')})دهی)`, 'success');
     } else if (action === 'meeting') {
       await api('/calibration/sessions/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to_status: 'begin-meeting' }) });
       toast('جلسه حضوری شروع شد', 'success');
     } else if (action === 'complete') {
       await api('/calibration/sessions/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to_status: 'complete' }) });
-      toast('جلسه تکمیل و نرخ ${t('agreementCol')}) محاسبه شد', 'success');
+      toast(`جلسه تکمیل و نرخ ${t('agreementCol')} محاسبه شد`, 'success');
     } else if (action === 'cancel') {
-      if (!confirm('جلسه t('cancelBtn3') شود؟')) return;
+      if (!confirm(`جلسه ${t('cancelBtn3')} شود؟`)) return;
       await api('/calibration/sessions/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to_status: 'cancel' }) });
-      toast('جلسه t('cancelBtn3') شد', 'warning');
+      toast(`جلسه ${t('cancelBtn3')} شد`, 'warning');
     } else if (action === 'score') {
       await openCalibrationScoring(id);
       return;
@@ -1921,26 +1921,26 @@ async function openNewCalibration() {
     : '';
   const interactionOptions = (State.interactions || []).map(i => `<option value="${esc(i.id)}">${esc(i.id)} — ${esc(i.subject)}</option>`).join('');
 
-  openModal(t('newCalibrationSessionTitle')), `
+  openModal(t('newCalibrationSessionTitle'), `
     <div class="field"><label>${t('sessionNameLabel')}</label><input id="calName" placeholder="${t('calSessionPlaceholder')}"></div>
-    <div class="field"><label>${t('rubricLabel')}</label><select id="calRubric">${rubricOptions || '<option value="">' + ${t('noRubricsOption')}) + '</option>'}</select></div>
+    <div class="field"><label>${t('rubricLabel')}</label><select id="calRubric">${rubricOptions || '<option value="">' + t('noRubricsOption') + '</option>'}</select></div>
     <div class="field"><label>${t('endDateLabel')}</label><input id="calDeadline" type="datetime-local"></div>
     <div class="field"><label>${t('targetAgreementLabel')}</label><input id="calTarget" type="number" step="0.05" min="0" max="1" value="0.8"></div>
     <div class="field"><label>${t('reviewersLabel')}</label>
-      <select id="calReviewers" multiple size="4">${reviewerOptions || '<option value="">' + ${t('noAgentsOption')}) + '</option>'}</select></div>
+      <select id="calReviewers" multiple size="4">${reviewerOptions || '<option value="">' + t('noAgentsOption') + '</option>'}</select></div>
     <div class="field"><label>${t('sampleInteractionsLabel')}</label>
-      <select id="calSamples" multiple size="4">${interactionOptions || '<option value="">' + ${t('noInteractionsOption')}) + '</option>'}</select></div>
+      <select id="calSamples" multiple size="4">${interactionOptions || '<option value="">' + t('noInteractionsOption') + '</option>'}</select></div>
   `, `<button class="btn btn-success" id="saveCal">${t('createSessionBtn')}</button>
       <button class="btn" data-action="close-modal">${t('cancelBtn2')}</button>`);
 
   $('#saveCal').addEventListener('click', async () => {
     try {
       const name = $('#calName').value.trim();
-      if (!name) throw new Error(t('sessionNameRequired')));
+      if (!name) throw new Error(t('sessionNameRequired'));
       const reviewer_usernames = Array.from($('#calReviewers').selectedOptions).map(o => o.value);
       const sample_interaction_ids = Array.from($('#calSamples').selectedOptions).map(o => o.value);
       const dt = $('#calDeadline').value;
-      if (!dt) throw new Error(t('deadlineRequired')));
+      if (!dt) throw new Error(t('deadlineRequired'));
       const body = {
         name,
         rubric_id: $('#calRubric').value,
@@ -1950,29 +1950,29 @@ async function openNewCalibration() {
         min_reviewers_per_interaction: 2,
         deadline_at: new Date(dt).toISOString()
       };
-      await withLoading(t('createCalLabel')), () => api('/calibration/sessions', { method: 'POST', body: JSON.stringify(body) }));
+      await withLoading(t('createCalLabel'), () => api('/calibration/sessions', { method: 'POST', body: JSON.stringify(body) }));
       closeModal();
       State.loaded.calibration = false;
       await loadCalibration(true);
-      toast(t('calibrationCreatedToast')), 'success');
+      toast(t('calibrationCreatedToast'), 'success');
     } catch (e) { toast(e.message, 'error'); }
   });
 }
 
 async function openCalibrationScoring(sessionId) {
-  showLoading(t('calSessionLoadLabel')));
+  showLoading(t('calSessionLoadLabel'));
   try {
     const s = await api('/calibration/sessions/' + sessionId);
     hideLoading();
     const samples = s.sample_interaction_ids || [];
-    if (samples.length === 0) { toast(t('noSampleInteractions')), 'warning'); return; }
+    if (samples.length === 0) { toast(t('noSampleInteractions'), 'warning'); return; }
     const sampleRows = samples.map(it => `
       <tr>
         <td>${esc(it)}</td>
         <td><input type="number" class="calScore" data-interaction="${esc(it)}" min="0" max="100" value="50" style="width:90px"></td>
         <td><input type="text" class="calNotes" data-interaction="${esc(it)}" placeholder="${t('notesOptionalPlaceholder')}" style="width:100%"></td>
       </tr>`).join('');
-    openModal(t('calibrationScoringTitle')), `
+    openModal(t('calibrationScoringTitle'), `
       <p style="color:var(--text-muted);margin-bottom:12px">t('scoreCol') هر تعامل را ۰ تا ۱۰۰ بگذارید. t('scoreCol')ها بهصورت کور (blind) ${t('registerBtn')}) میشوند.</p>
       <table class="data-table"><thead><tr><th>${t('interactionCol')}</th><th>${t('overallScoreCol')}</th><th>${t('notesCol')}</th></tr></thead><tbody>${sampleRows}</tbody></table>
     `, `<button class="btn btn-success" id="saveCalScore">${t('saveScoresBtn')}</button>
@@ -1981,7 +1981,7 @@ async function openCalibrationScoring(sessionId) {
       try {
         const scores = samples.map(it => {
           const val = parseFloat(document.querySelector(`.calScore[data-interaction="${it}"]`).value);
-          if (isNaN(val)) throw new Error(${t('invalidScore')}) + ' ' + it);
+          if (isNaN(val)) throw new Error(t('invalidScore') + ' ' + it);
           return {
             interaction_id: it,
             criterion_scores: {},      // blank JSONB object; overall is the aggregate
@@ -1989,13 +1989,13 @@ async function openCalibrationScoring(sessionId) {
             notes: document.querySelector(`.calNotes[data-interaction="${it}"]`).value || null
           };
         });
-        await withLoading(t('submitScoresLabel')), async () => {
+        await withLoading(t('submitScoresLabel'), async () => {
           for (const sc of scores) {
             await api('/calibration/sessions/' + sessionId + '/score', { method: 'POST', body: JSON.stringify(sc) });
           }
         });
         closeModal();
-        toast(t('scoresSavedToast')), 'success');
+        toast(t('scoresSavedToast'), 'success');
       } catch (e) { toast(e.message, 'error'); }
     });
   } catch (e) {
