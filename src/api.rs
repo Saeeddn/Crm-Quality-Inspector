@@ -1164,7 +1164,7 @@ pub async fn list_audit_logs_handler(
         return Err(AppError::Forbidden("فقط مدیر سیستم دسترسی دارد".into()));
     }
     let page = q.page.unwrap_or(1).max(1);
-    let limit = q.limit.unwrap_or(50).min(200).max(1);
+    let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let offset = (page - 1) * limit;
     let (items, total) = state.store.list_audit_logs(
         limit, offset,
@@ -1210,7 +1210,7 @@ pub async fn list_notifications_handler(
     Query(q): Query<NotificationQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
     let page = q.page.unwrap_or(1).max(1);
-    let limit = q.limit.unwrap_or(30).min(100).max(1);
+    let limit = q.limit.unwrap_or(30).clamp(1, 100);
     let offset = (page - 1) * limit;
     let unread_only = q.unread_only.unwrap_or(false);
     
