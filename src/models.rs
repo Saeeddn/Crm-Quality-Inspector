@@ -767,3 +767,41 @@ pub struct ListQuery {
         pub details: Option<serde_json::Value>,
         pub created_at: DateTime<Utc>,
     }
+
+// ===================== NOTIFICATION =====================
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum NotificationType {
+    #[serde(rename = "issue_created")]
+    IssueCreated,
+    #[serde(rename = "issue_resolved")]
+    IssueResolved,
+    #[serde(rename = "score_submitted")]
+    ScoreSubmitted,
+    #[serde(rename = "coaching_plan_created")]
+    CoachingPlanCreated,
+    #[serde(rename = "coaching_plan_overdue")]
+    CoachingPlanOverdue,
+    #[serde(rename = "customer_risk_high")]
+    CustomerRiskHigh,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Notification {
+    pub id: String,
+    pub username: String,       // who gets notified
+    pub r#type: String,         // notification type
+    pub title: String,          // short Persian title
+    pub message: String,        // body text
+    pub resource_type: Option<String>,
+    pub resource_id: Option<String>,
+    pub read_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NotificationListQuery {
+    pub unread_only: Option<bool>,
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+}

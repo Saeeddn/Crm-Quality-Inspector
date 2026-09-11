@@ -70,6 +70,10 @@ pub fn router() -> Router<AppState> {
                 .route("/calibration/summary", get(calibration_summary_handler))
                 // =================== Audit Log ===================
                 .route("/audit/logs", get(list_audit_logs_handler))
+        .route("/notifications", get(list_notifications_handler))
+        .route("/notifications/unread-count", get(get_unread_count_handler))
+        .route("/notifications/:id/read", patch(mark_notification_read_handler))
+        .route("/notifications/read-all", patch(mark_all_notifications_read_handler))
         }
 
 pub async fn serve_index() -> impl IntoResponse {
@@ -424,6 +428,7 @@ pub async fn submit_score(
     let s = Service::new(&state.store);
     let result = s.score_interaction(req).await?;
     let result_id = result.id.clone();
+    let interaction_id = result.interaction_id.clone();
     let details = serde_json::json!({ "interaction_id": result_id });
     let _ = state.store.log_audit(&AuditLog {
         id: format!("audit_{}", Utc::now().timestamp_millis()),
@@ -435,6 +440,14 @@ pub async fn submit_score(
         details: Some(details),
         created_at: Utc::now(),
     }).await.unwrap_or_default();
+    
+    // Notify about new score
+    notify(&state, &user.username, "score_submitted",
+           "امتیاز ثبت شد",
+           &format!("امتیاز {} برای تعامل {} ثبت شد", result.overall_score, result_id),
+           Some("score"),
+           Some(&result.id)).await.unwrap_or_default();
+    
     Ok(ok(result))
 }
 
@@ -510,6 +523,14 @@ pub async fn create_issue_handler(
         details: Some(serde_json::json!({ "severity": req.severity, "category": req.category })),
         created_at: Utc::now(),
     }).await.unwrap_or_default();
+    
+    // Create notification for new issue
+    notify(&state, &me.username, "issue_created", 
+           "ایراد جدید ثبت شد",
+           &format!("ایراد {} ({}) برای تعامل {} ایجاد شد", req.severity, req.category, interaction_id),
+           Some("issue"),
+           Some(&issue.id)).await.unwrap_or_default();
+    
     let _ = me.username;
     Ok(ok(issue))
 }
@@ -524,6 +545,8 @@ pub async fn resolve_issue(
     let issue = s.resolve_issue(&id, req).await?;
     let issue_id = issue.id.clone();
     let issue_status = issue.status.clone();
+    let severity = issue.severity.clone();
+    let category = issue.category.clone();
     let _ = state.store.log_audit(&AuditLog {
         id: format!("audit_{}", Utc::now().timestamp_millis()),
         username: me.username.clone(),
@@ -534,6 +557,14 @@ pub async fn resolve_issue(
         details: Some(serde_json::json!({ "resolution": issue_status })),
         created_at: Utc::now(),
     }).await.unwrap_or_default();
+    
+    // Create notification for resolved issue
+    notify(&state, &me.username, "issue_resolved",
+           "ایراد بسته شد",
+           "ایراد مورد نظر با موفقیت بسته شد",
+           Some("issue"),
+           Some(&issue.id)).await.unwrap_or_default();
+    
     Ok(ok(issue))
 }
 
@@ -1163,3 +1194,102 @@ pub async fn list_audit_logs_handler(
         "total_pages": if limit > 0 { (total + limit - 1) / limit } else { 1 },
     })))
 }
+
+
+// =================== NOTIFICATIONS ===================
+
+#[derive(Deserialize)]
+pub struct NotificationQuery {
+    pub unread_only: Option<bool>,
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+}
+
+pub async fn list_notifications_handler(
+    State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>,
+    Query(q): Query<NotificationQuery>,
+) -> AppResult<Json<serde_json::Value>> {
+    let page = q.page.unwrap_or(1).max(1);
+    let limit = q.limit.unwrap_or(30).min(100).max(1);
+    let offset = (page - 1) * limit;
+    let unread_only = q.unread_only.unwrap_or(false);
+    
+    let (items, total) = state.store.list_notifications(&me.username, unread_only, limit, offset).await?;
+    let items: Vec<serde_json::Value> = items.into_iter().map(|n| {
+        serde_json::json!({
+            "id": n.id,
+            "username": n.username,
+            "type": n.type,
+            "title": n.title,
+            "message": n.message,
+            "resource_type": n.resource_type,
+            "resource_id": n.resource_id,
+            "read_at": n.read_at.map(|t| t.to_rfc3339()),
+            "created_at": n.created_at.to_rfc3339(),
+        })
+    }).collect();
+    
+    Ok(ok(json!({
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": if limit > 0 { (total + limit - 1) / limit } else { 1 },
+    })))
+}
+
+pub async fn get_unread_count_handler(
+    State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>>,
+) -> AppResult<Json<serde_json::Value>> {
+    let count = state.store.get_unread_count(&me.username).await?;
+    Ok(ok(json!({"count": count})))
+}
+
+pub async fn mark_notification_read_handler(
+    State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>,
+    Path(notification_id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    state.store.mark_notification_read(&notification_id).await?;
+    Ok(ok(json!({"success": true})))
+}
+
+pub async fn mark_all_notifications_read_handler(
+    State(state): State<AppState>,
+    Extension(me): Extension<Arc<CurrentUser>>,
+) -> AppResult<Json<serde_json::Value>> {
+    let count = state.store.mark_all_notifications_read(&me.username).await?;
+    Ok(ok(json!({"count": count})))
+}
+
+/// Helper to create a notification for an action
+async fn notify(
+    state: &AppState,
+    username: &str,
+    ntype: &str,
+    title: &str,
+    message: &str,
+    resource_type: Option<&str>,
+    resource_id: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use uuid::Uuid;
+    use chrono::Utc;
+    
+    let id = Uuid::new_v4().to_string();
+    let notification = Notification {
+        id,
+        username: username.to_string(),
+        r#type: ntype.to_string(),
+        title: title.to_string(),
+        message: message.to_string(),
+        resource_type: resource_type.map(|s| s.to_string()),
+        resource_id: resource_id.map(|s| s.to_string()),
+        read_at: None,
+        created_at: Utc::now(),
+    };
+    state.store.create_notification(&notification).await?;
+    Ok(())
+}
+

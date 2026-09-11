@@ -480,6 +480,17 @@ const I18N = {
     resumeBtn: 'ادامه',
     escalateBtn: 'ارجاع',
 
+
+    // Notifications
+    notificationsTitle: 'نوتیفیکیشن‌ها',
+    markAllRead: 'خوانده‌شده کنید',
+    noNotifications: 'هیچ نوتیفیکیشنی وجود ندارد',
+    viewIssues: 'مشاهده ایرادات',
+    timeJustNow: 'همین الان',
+    timeMinutesAgo: 'دقیقه پیش',
+    timeHoursAgo: 'ساعت پیش',
+    timeDaysAgo: 'روز پیش',
+
     // Coaching toasts
     planApprovedToast: 'برنامه تایید شد',
     planClosedToast: 'برنامه بسته شد',
@@ -778,7 +789,18 @@ const I18N = {
     navRubrics: 'Standards',
     navReport: 'Agent Report',
     navUsers: 'Users',
-    navAudit: 'Audit Log',
+
+    // Notifications
+    notificationsTitle: 'Notifications',
+    markAllRead: 'Mark all read',
+    noNotifications: 'No notifications yet',
+    viewIssues: 'View Issues',
+    timeJustNow: 'just now',
+    timeMinutesAgo: 'min ago',
+    timeHoursAgo: 'hours ago',
+    timeDaysAgo: 'days ago',
+
+        navAudit: 'Audit Log',
 
     // Common UI
     logout: 'Logout',

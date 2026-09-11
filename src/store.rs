@@ -203,6 +203,17 @@ impl Store {
                                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                                 UNIQUE(session_id, criterion_id)
                             )",
+                            "CREATE TABLE IF NOT EXISTS notifications (
+                                id TEXT PRIMARY KEY,
+                                username TEXT NOT NULL,
+                                type TEXT NOT NULL,
+                                title TEXT NOT NULL,
+                                message TEXT NOT NULL,
+                                resource_type TEXT DEFAULT '',
+                                resource_id TEXT,
+                                read_at TIMESTAMPTZ,
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                            )",
                             "CREATE TABLE IF NOT EXISTS audit_logs (
                                 id TEXT PRIMARY KEY,
                                 username TEXT NOT NULL,
@@ -220,7 +231,7 @@ impl Store {
         // Sequences for clean sequential ids. Each starts at 1000 so the
         // demo data has recognisable ids (1001, 1002, ...). The Store
         // layer reads nextval() and assigns the value as a TEXT id.
-        for tbl in ["agents", "customers", "interactions", "rubrics", "scores", "issues", "metrics", "kpis", "coaching_plans", "coaching_follow_ups", "calibration_sessions", "calibration_scores", "calibration_decisions", "audit_logs"] {
+        for tbl in ["agents", "customers", "interactions", "rubrics", "scores", "issues", "metrics", "kpis", "coaching_plans", "coaching_follow_ups", "calibration_sessions", "calibration_scores", "calibration_decisions", "audit_logs", "notifications"] {
             sqlx::query(&format!(
                 "CREATE SEQUENCE IF NOT EXISTS {tbl}_id_seq START 1000"
             ))
@@ -2296,5 +2307,89 @@ impl Store {
             created_at: r.get("created_at"),
         }).collect();
         Ok((logs, total))
+    }
+
+    // =================== NOTIFICATIONS ===================
+
+    pub async fn create_notification(&self, n: &Notification) -> AppResult<()> {
+        sqlx::query(
+            "INSERT INTO notifications (id, username, type, title, message, resource_type, resource_id, read_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+        )
+        .bind(&n.id)
+        .bind(&n.username)
+        .bind(&n.r#type)
+        .bind(&n.title)
+        .bind(&n.message)
+        .bind(&n.resource_type.as_ref().unwrap_or(&String::new()))
+        .bind(&n.resource_id)
+        .bind(&n.read_at)
+        .bind(&n.created_at)
+        .execute(&self.pool).await?;
+        Ok(())
+    }
+
+    pub async fn list_notifications(&self, username: &str, unread_only: bool, limit: i64, offset: i64) -> AppResult<(Vec<Notification>, i64)> {
+        let where_sql = if unread_only {
+            format!("WHERE username = $1 AND read_at IS NULL")
+        } else {
+            "WHERE username = $1".to_string()
+        };
+        
+        let count_sql = format!("SELECT COUNT(*) FROM notifications {}", where_sql);
+        let total: i64 = sqlx::query_scalar(&count_sql)
+            .bind(username)
+            .fetch_one(&self.pool).await?;
+        
+        let query_str = format!(
+            "SELECT * FROM notifications {} ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            where_sql,
+        );
+        let rows = sqlx::query(&query_str)
+            .bind(username)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool).await?;
+        
+        let notifications = rows.into_iter().map(|r| Notification {
+            id: r.get("id"),
+            username: r.get("username"),
+            r#type: r.get("type"),
+            title: r.get("title"),
+            message: r.get("message"),
+            resource_type: r.get("resource_type"),
+            resource_id: r.get("resource_id"),
+            read_at: r.get("read_at"),
+            created_at: r.get("created_at"),
+        }).collect();
+        
+        Ok((notifications, total))
+    }
+
+    pub async fn mark_notification_read(&self, notification_id: &str) -> AppResult<()> {
+        sqlx::query(
+            "UPDATE notifications SET read_at = NOW() WHERE id = $1"
+        )
+        .bind(notification_id)
+        .execute(&self.pool).await?;
+        Ok(())
+    }
+
+    pub async fn mark_all_notifications_read(&self, username: &str) -> AppResult<u64> {
+        let result = sqlx::query(
+            "UPDATE notifications SET read_at = NOW() WHERE username = $1 AND read_at IS NULL"
+        )
+        .bind(username)
+        .execute(&self.pool).await?;
+        Ok(result.rows_affected())
+    }
+
+    pub async fn get_unread_count(&self, username: &str) -> AppResult<i64> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM notifications WHERE username = $1 AND read_at IS NULL"
+        )
+        .bind(username)
+        .fetch_one(&self.pool).await?;
+        Ok(count)
     }
 }

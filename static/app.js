@@ -182,6 +182,8 @@ async function enterApp() {
   if (mobileAuditNav) mobileAuditNav.style.display = State.user?.is_admin ? '' : 'none';
   await loadDashboard();
   switchTab('dashboard');
+  loadNotifications();
+  setInterval(loadNotifications, NOTIF_INTERVAL);
   // Eagerly pre-fetch the customer risk page so the first tab switch
   // shows data immediately instead of a loading spinner.
   loadCustomerRisk(true);
@@ -2004,3 +2006,141 @@ async function openCalibrationScoring(sessionId) {
   }
 }
 
+
+// ============ Notifications ============
+let notifPanelOpen = false;
+const NOTIF_INTERVAL = 30000; // 30 seconds
+
+async function loadNotifications() {
+  try {
+    const data = await api('/notifications?unread_only=true&limit=20');
+    updateNotifBadge(data.items?.length || 0);
+  } catch (e) {
+    console.error('Failed to load notifications:', e);
+  }
+}
+
+function updateNotifBadge(count) {
+  const badge = $('#notifBadge');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function toggleNotifications() {
+  const panel = $('#notifPanel');
+  if (!panel) return;
+  
+  notifPanelOpen = !notifPanelOpen;
+  panel.classList.toggle('hidden', !notifPanelOpen);
+  
+  if (notifPanelOpen) {
+    renderNotifications();
+  }
+}
+
+async function renderNotifications() {
+  const list = $('#notifList');
+  if (!list) return;
+  
+  try {
+    showLoading(t('toastLoadDashboard'));
+    const data = await api('/notifications?limit=20');
+    hideLoading();
+    
+    const items = data.items || [];
+    if (items.length === 0) {
+      list.innerHTML = `<div class="notif-empty">${t('noNotifications')}</div>`;
+      return;
+    }
+    
+    list.innerHTML = items.map(n => {
+      const iconMap = {
+        'issue_created': '🔴',
+        'issue_resolved': '🟢',
+        'score_submitted': '📊',
+        'coaching_plan_created': '📚',
+      };
+      const icon = iconMap[n.type] || '🔔';
+      const iconClass = n.type.replace('_', '-');
+      const timeAgo = getTimeAgo(n.created_at);
+      
+      return `<a class="notif-item ${!n.read_at ? 'unread' : ''}" href="#" onclick="handleNotificationClick(event, '${n.id}', '${n.resource_type || ''}', '${n.resource_id || ''}');">
+        <div class="notif-icon-wrap ${iconClass}">${icon}</div>
+        <div class="notif-content">
+          <div class="notif-title">${esc(n.title)}</div>
+          <div class="notif-message">${esc(n.message)}</div>
+        </div>
+        <div class="notif-time">${timeAgo}</div>
+      </a>`;
+    }).join('');
+    
+    updateNotifBadge(0);
+  } catch (e) {
+    hideLoading();
+    console.error('Failed to render notifications:', e);
+  }
+}
+
+function handleNotificationClick(e, notifId, resourceType, resourceId) {
+  e.preventDefault();
+  markNotificationRead(notifId);
+  toggleNotifications();
+  
+  if (resourceType === 'issue' && resourceId) {
+    switchTab('issues');
+  } else if (resourceType === 'score' && resourceId) {
+    switchTab('interactions');
+  }
+}
+
+async function markNotificationRead(id) {
+  try {
+    await api('/notifications/' + id + '/read', { method: 'PATCH' });
+    renderNotifications();
+    loadNotifications();
+  } catch (e) {
+    console.error('Failed to mark notification read:', e);
+  }
+}
+
+async function markAllNotificationsRead() {
+  try {
+    await api('/notifications/read-all', { method: 'PATCH' });
+    renderNotifications();
+    loadNotifications();
+  } catch (e) {
+    console.error('Failed to mark all notifications read:', e);
+  }
+}
+
+function getTimeAgo(isoString) {
+  if (!isoString) return '';
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diff = Math.floor((now - date) / 1000);
+    
+    if (diff < 60) return t('timeJustNow');
+    if (diff < 3600) return `${Math.floor(diff / 60)} ${t('timeMinutesAgo')}`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} ${t('timeHoursAgo')}`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)} ${t('timeDaysAgo')}`;
+    return fmtDate(isoString);
+  } catch {
+    return isoString;
+  }
+}
+
+// Close notification panel when clicking outside
+document.addEventListener('click', (e) => {
+  const panel = $('#notifPanel');
+  const btn = $('#notifBtn');
+  if (panel && notifPanelOpen && !panel.contains(e.target) && !btn?.contains(e.target)) {
+    notifPanelOpen = false;
+    panel.classList.add('hidden');
+  }
+});
