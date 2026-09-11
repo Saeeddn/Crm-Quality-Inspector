@@ -6,8 +6,7 @@ use crate::AppState;
 use axum::{
     extract::{Extension, Path, Query, State},
     http::{header, StatusCode},
-    middleware,
-    response::{Html, IntoResponse, Json as AxumJson},
+    response::{Html, IntoResponse},
     routing::{get, patch, post},
     Json, Router,
 };
@@ -428,14 +427,14 @@ pub async fn submit_score(
     let s = Service::new(&state.store);
     let result = s.score_interaction(req).await?;
     let result_id = result.id.clone();
-    let interaction_id = result.interaction_id.clone();
-    let details = serde_json::json!({ "interaction_id": result_id });
+    let _interaction_id = result.interaction_id.clone();
+    let details = serde_json::json!({ "interaction_id": &result_id });
     let _ = state.store.log_audit(&AuditLog {
         id: format!("audit_{}", Utc::now().timestamp_millis()),
         username: user.username.clone(),
         action: "score_interaction".to_string(),
         resource_type: "score".to_string(),
-        resource_id: Some(result_id),
+        resource_id: Some(result_id.clone()),
         summary: Some("امتیازدهی تعامل".into()),
         details: Some(details),
         created_at: Utc::now(),
@@ -545,8 +544,8 @@ pub async fn resolve_issue(
     let issue = s.resolve_issue(&id, req).await?;
     let issue_id = issue.id.clone();
     let issue_status = issue.status.clone();
-    let severity = issue.severity.clone();
-    let category = issue.category.clone();
+    let _severity = issue.severity.clone();
+    let _category = issue.category.clone();
     let _ = state.store.log_audit(&AuditLog {
         id: format!("audit_{}", Utc::now().timestamp_millis()),
         username: me.username.clone(),
@@ -1220,7 +1219,7 @@ pub async fn list_notifications_handler(
         serde_json::json!({
             "id": n.id,
             "username": n.username,
-            "type": n.type,
+            "type": n.r#type,
             "title": n.title,
             "message": n.message,
             "resource_type": n.resource_type,
@@ -1241,7 +1240,7 @@ pub async fn list_notifications_handler(
 
 pub async fn get_unread_count_handler(
     State(state): State<AppState>,
-    Extension(me): Extension<Arc<CurrentUser>>>,
+    Extension(me): Extension<Arc<CurrentUser>>,
 ) -> AppResult<Json<serde_json::Value>> {
     let count = state.store.get_unread_count(&me.username).await?;
     Ok(ok(json!({"count": count})))
