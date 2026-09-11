@@ -501,7 +501,7 @@ function renderDashboard() {
   ).join('');
   $('#coverageBar').innerHTML = `
     <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-      <span style="color:var(--text-muted)">${t('scoredCount')(d.scored_count || 0, d.interaction_count || 0)}</span>
+      <span style="color:var(--text-muted)">${t('scoredCount', d.scored_count || 0, d.interaction_count || 0)}</span>
       <strong>${(d.coverage || 0).toFixed(1)}%</strong>
     </div>
     <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, d.coverage || 0)}%"></div></div>
@@ -632,7 +632,7 @@ function renderPagination(selector, total, page, totalPages, onChange) {
     : '';
   el.innerHTML =
     `<div class="pager-bar" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-       <span class="pager-info">${t('pageInfoLabel')(start, end, total, page, totalPages)}</span>
+       <span class="pager-info">${t('pageInfoLabel', start, end, total, page, totalPages)}</span>
        <div class="pager-buttons" style="display:flex;gap:4px">
          ${btn(t('pagerFirst'), 1, page === 1)}
            ${btn(t('pagerPrev'), page - 1, page === 1)}
@@ -912,7 +912,7 @@ function renderRecommendations() {
         <div>
           <div class="rec-subject">${esc(r.subject)}</div>
           <div style="color:var(--text-muted);font-size:12px;margin-top:2px">
-            ${t('expertCustomerChannel')(esc(r.agent_name || '-'), '', '')} | ${t('colCustomer')}: ${esc(r.customer_name || '-')} | ${t('colChannel')}: ${esc(r.channel)}
+            ${t('expertCustomerChannel', esc(r.agent_name || '-'), '', '')} | ${t('colCustomer')}: ${esc(r.customer_name || '-')} | ${t('colChannel')}: ${esc(r.channel)}
           </div>
         </div>
         <div style="text-align:center">
@@ -981,7 +981,7 @@ async function toggleAgent(id, active) {
     await api('/agents/' + id, { method: 'PATCH', body: JSON.stringify({ active }) });
     State.agents = await api('/agents'); cacheSet(t('agents'), State.agents);
     renderAgents();
-    toast(t('toggleToast')(active));
+    toast(t('toggleToast', active));
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -1022,7 +1022,7 @@ function renderCustomers() {
   `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">${t('emptyCustomerMsg')}</td></tr>`;
   tbody.querySelectorAll('[data-edit-customer]').forEach(b => b.addEventListener('click', () => openEditCustomer(b.dataset.editCustomer)));
   tbody.querySelectorAll('[data-del-customer]').forEach(b => b.addEventListener('click', async () => {
-    if (!confirm(t('confirmDelete')(c.name))) return;
+    if (!confirm(t('confirmDelete', c.name))) return;
     try { await api('/customers/' + b.dataset.delCustomer, { method: 'DELETE' }); State.loaded.customers = false; await loadCustomers(); toast(t('customerDeletedToast')); }
     catch (e) { toast(e.message, 'error'); }
   }));
@@ -1032,7 +1032,7 @@ function renderCustomers() {
 function openEditCustomer(id) {
   const c = State.customers.find(x => x.id === id);
   if (!c) return;
-  openModal(t('editCustomerTitle')(c.name), `
+  openModal(t('editCustomerTitle', c.name), `
     <div class="field"><label>${t('colName')}</label><input id="cName" value="${esc(c.name)}"></div>
     <div class="field"><label>${t('colPhone')}</label><input id="cPhone" value="${esc(c.phone)}"></div>
     <div class="field"><label>${t('colProduct')}</label>
@@ -1173,7 +1173,7 @@ function renderKpis() {
       const active = b.dataset.active === 'true';
       await api('/kpis/' + b.dataset.toggleKpi, { method: 'PATCH', body: JSON.stringify({ active }) });
       State.kpis = await api('/kpis'); renderKpis();
-      toast(t('toggleToast')(active));
+      toast(t('toggleToast', active));
     } catch (e) { toast(e.message, 'error'); }
   }));
   list.querySelectorAll('[data-del-kpi]').forEach(b => b.addEventListener('click', async () => {
@@ -1191,7 +1191,7 @@ async function seedKpis() {
     const result = await api('/kpis/seed', { method: 'POST' });
     State.kpis = await api('/kpis');
     renderKpis();
-    toast(t('kpisLoadedToast')(result.length));
+    toast(t('kpisLoadedToast', result.length));
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -1393,7 +1393,7 @@ function renderUsers() {
   tbody.querySelectorAll('[data-del-user]').forEach(b => b.addEventListener('click', async () => {
     const u = b.dataset.delUser;
     if (u === State.user?.username) { toast(t('cannotDeleteSelf'), 'error'); return; }
-    if (!confirm(t('confirmDeleteUser')(u))) return;
+    if (!confirm(t('confirmDeleteUser', u))) return;
     try {
       await api('/users/' + encodeURIComponent(u), { method: 'DELETE' });
       await loadUsers();
@@ -1428,7 +1428,7 @@ function openNewUser() {
 function openEditUser(username) {
   const u = StateUsers.find(x => x.username === username);
   if (!u) return;
-  openModal(t('editUserTitle')(username), `
+  openModal(t('editUserTitle', username), `
     <div class="field"><label>نام کاربری</label><input value="${esc(username)}" disabled></div>
     <div class="field"><label>${t('newPasswordLabel')}</label><input id="uPassNew" type="password" autocomplete="new-password"></div>
     <div class="field"><label><input type="checkbox" id="uAdmin" ${u.is_admin ? 'checked' : ''}> ${t('adminAccessLabel')}</label></div>
@@ -1490,9 +1490,9 @@ function renderAudit() {
     const totalPages = State.auditTotalPages || 1;
     pagerEl.innerHTML = total > auditPageSize ?
       `<div class="pager" style="margin-bottom:12px"><button onclick="loadAudit(${Math.max(1,auditPage-1)})" ${auditPage<=1?'disabled':''}>${t('auditPrev')}</button>
-       <span style="padding:0 12px">${t('auditPageInfo')(auditPage, totalPages, total)}</span>
+       <span style="padding:0 12px">${t('auditPageInfo', auditPage, totalPages, total)}</span>
        <button onclick="loadAudit(${auditPage+1})" ${auditPage>=totalPages?'disabled':''}>${t('auditNext')}</button></div>` :
-      `<div style="margin-bottom:12px;color:var(--text-muted)">${t('auditTotalItems')(total)}</div>`;
+      `<div style="margin-bottom:12px;color:var(--text-muted)">${t('auditTotalItems', total)}</div>`;
   }
 }
 
